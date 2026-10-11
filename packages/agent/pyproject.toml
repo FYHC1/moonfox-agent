@@ -1,0 +1,20 @@
+[build-system]
+requires = ["hatchling>=1.26,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "moonfox-agent-core"
+version = "0.1.0"
+description = "Portable agent primitives with an injected model provider"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = ["moonfox-ai==0.1.0", "pydantic>=2.12,<3"]
+
+[tool.uv.sources]
+moonfox-ai = { workspace = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/moonfox_agent"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src", "tests", "README.md", "pyproject.toml"]
