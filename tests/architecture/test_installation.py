@@ -201,6 +201,11 @@ def test_core_wheels_and_source_installs_work_outside_workspace(tmp_path):
     assert "2 + 3 = 5" in output
     assert "reason=completed; turns=2; requests=2" in output
     run([core_python, "-I", "-m", "pip", "check"], cwd=outside, env=env)
+    advanced = outside / "core_stage_b.py"
+    shutil.copy2(ROOT / "examples" / "core_stage_b.py", advanced)
+    output = run([core_python, "-I", advanced], cwd=outside, env=env)
+    assert "first=limit_reached; turns=2; nested=calc/1" in output
+    assert "second=completed; turns=1; requests=3" in output
 
     # Also exercise the handoff's exact local-directory install workflow, not editable installs.
     source_python = make_environment(tmp_path / "local-installs")
@@ -213,4 +218,5 @@ def test_core_wheels_and_source_installs_work_outside_workspace(tmp_path):
     installed = json.loads(run([source_python, "-I", "-c", CORE_SMOKE], cwd=outside, env=env))
     assert set(installed) == expected_runtime
     assert "requests=2" in run([source_python, "-I", example], cwd=outside, env=env)
+    assert "requests=3" in run([source_python, "-I", advanced], cwd=outside, env=env)
     run([source_python, "-I", "-m", "pip", "check"], cwd=outside, env=env)

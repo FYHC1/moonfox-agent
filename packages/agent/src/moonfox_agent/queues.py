@@ -1,4 +1,4 @@
-"""Independent FIFO primitive. Run scheduling is introduced in the next stage."""
+"""FIFO queues for turn-boundary steering and idle-boundary follow-up delivery."""
 
 from copy import deepcopy
 from typing import Literal

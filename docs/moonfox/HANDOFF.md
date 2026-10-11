@@ -2,31 +2,45 @@
 
 > **用途**：当前实施交接文档，保留设计决策并记录已验证的阶段进展。新会话从本页继续，无需回溯历史对话。
 >
-> **当前状态**：**阶段 A 已实现并通过验收**：独立 ai/agent 包、依赖规则、faux provider、最小工具续轮链路和独立安装测试。下一步是阶段 B。
+> **当前状态**：**阶段 A/B 已实现并通过验收**。独立核心、faux provider、双队列调度、请求/工具/turn 钩子、并行/嵌套工具、取消与预算已就绪；下一步是阶段 C 的 headless 应用运行时与扩展 SDK。
 
 ---
 
 ## 0. 一句话状态
 
-阶段 A 的两包骨架、AI 原语、faux provider 与最小顺序工具循环已落盘；两个包的独立构建、干净安装及仓库外示例已验证。安装与检查命令见根 [README](../../README.md)。
+两包独立核心已实现；阶段 A 基线先上传 GitHub，再完成阶段 B。安装与检查命令见根 [README](../../README.md)，核心 API 行为见 [Agent 包说明](../../packages/agent/README.md)。
 
 ### 当前代码边界
 
 - `moonfox_ai.api`：消息/事件、有界单消费者流、transcript 重放、估算/溢出、faux provider；仅依赖标准库。
-- `moonfox_agent.api`：最小顺序工具续轮、Pydantic 参数校验、运行事件、显式轮数预算、单向取消与等待 idle；项目内仅依赖 ai。
-- `queues.py` 是已测试的独立 FIFO 原语，**尚未接入运行调度**；`hooks.py` 只预留阶段 B 的契约，**尚未派发**。
-- 阶段 B 继续：steering/follow-up 双队列调度、完整请求/工具/turn 钩子、并行及嵌套工具、continue/reset 与全分支测试。不宣称这些能力已实现。
+- `moonfox_agent.api`：steering/follow-up 双队列（one_at_a_time/all）、完整请求/工具/turn 钩子、并行/串行工具、受检嵌套调用、事件、取消和显式运行预算；项目内仅依赖 ai。
+- `continue_`、`reset`、状态替换/模型/工具设置均提供公开入口；运行中修改规范状态被拒绝，取消须等待 idle。
+- 默认工具执行改为 parallel；任一工具 sequential 覆盖使整批串行。阶段 A 四参数 execute 保持兼容，嵌套调用使用新增 execute_with_context 与 ctx.execute_tool。
 - 尚未创建应用包、WebUI、具体扩展或真实 provider。
 
 ### 已验证与复现
 
-- `python scripts/check.py --installation`：Ruff、格式检查、mypy strict、单元/架构测试及安装验收。
+- `python scripts/check.py --installation`：Ruff、格式检查、mypy strict、确定性单元/架构测试及安装验收均通过。阶段 B 新增队列、钩子、并行/嵌套、错误和资源收尾负例；覆盖率用 coverage 的 branch 模式实测，不宣称 100%。
+- 阶段 B 最终实测：完整验收 **209 passed**；Agent 专项 **126 passed**；mypy strict 检查 **19** 个源码文件；coverage 启用分支统计的总覆盖率 **97%**（非 100% 分支覆盖）。
 - 安装验收分别构建 sdist → wheel，验证 AI 单包、Agent wheel 自动解析 AI 依赖、依次本地目录安装三个干净环境；均不安装宿主/扩展/Web 框架。
-- 示例复制到仓库外，使用 `python -I` 执行，输出 `2 + 3 = 5` 与 `reason=completed; turns=2; requests=2`。
+- 两个示例复制到仓库外，用 `python -I` 执行：core_only 验证工具续轮；core_stage_b 验证受检嵌套调用、follow-up、到限停止与显式继续。
 - 实测 Windows / Python 3.14.8；声明最低 Python 3.12，但本机没有对 3.12 单独执行测试。开发工具安装在本会话 scratch 虚拟环境，不改全局 Python。
-- Git 已初始化为 `main`；阶段 A 基线将推送至公开仓库 `https://github.com/FYHC1/moonfox-agent`，提交使用 GitHub noreply 邮箱。
+- Git 分支 `main`，公开仓库 `https://github.com/FYHC1/moonfox-agent`；阶段 A 基线提交 `a92898f` 已推送并验证远程哈希一致。Git 身份仅配置本仓库，使用 GitHub noreply 邮箱。
 
 实现修正参考伪代码：取消信号以 AI 层协议表示，避免反向依赖；流不是广播，溢出明确失败且最终结果可等待；未终止流确定性报错；快照采用深拷贝；未知自定义消息要求显式 codec，编程错误不冒充模型失败。
+
+### 阶段 B 的实现约束
+
+- 首轮也调用 prepare_request；返回的 context/model/thinking_level 在当前 run 后续请求持续有效，不改下次 run 默认配置。canonical_messages 提供未增强 transcript，transform_context 每次只改临时副本。
+- finish_turn 的 None/end/continue 按设计派发；错误/中断优先，continue 由一次自然请求满足或补一次 context-only 请求，所有路径共用同一次轮数预算。到限不消费下一批队列、不自动重入。
+- 工具参数先兼容准备、再严格 schema 校验、再 before 检查；并行 preflight 顺序稳定。完成事件按完成顺序，工具结果按调用源顺序写入；after 不能掩盖失败。
+- 嵌套调用共享 before/after、取消信号、ToolCallLimits（每 turn，默认 max_depth=8/max_calls=128，可注入）。子调用仅留在父结果 nested_calls；默认 codec 清除工具审计/程序字段，不发给模型。
+- 单向取消收敛已启动工具/嵌套/更新/监听器后才 idle；外部 task 取消收尾后重抛。监听器或编程错误先补齐可配对结果再传播；非法 provider 工具 ID 保存诊断并拒绝执行。
+- 核心不是插件宿主或沙箱；不实现通知隔离/业务重试/跨 run 成本网关。任意未注册后台任务与阻塞同步工具由调用方负责。
+
+### 下一步：阶段 C
+
+创建 packages/moonfox-app 的 runtime（entries/projection/storage/session/prompt/compaction）、轻量 extension_api、扩展注册/派发/生命周期与 headless 装配。继续保持 runtime 不反向 import services/server/具体扩展；无 server、前端或业务扩展也能保存恢复会话。本轮未创建这些模块。
 
 文档维护说明：本轮 Ruff 曾误格式化 Markdown 代码块；当前 HANDOFF/DESIGN 已精确恢复后仅更新状态，mini-pi 与历史草案的排版调整经用户确认保留。Ruff 已限定 Python 文件并排除 docs，后续不再格式化参考文档。
 

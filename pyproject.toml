@@ -1,6 +1,7 @@
 [dependency-groups]
 dev = [
     "build>=1.2,<2",
+    "coverage>=7.10,<8",
     "hatchling>=1.26,<2",
     "mypy>=1.15,<2",
     "pytest>=8.3,<10",

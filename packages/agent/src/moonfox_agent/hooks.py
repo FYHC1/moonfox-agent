@@ -1,7 +1,10 @@
-"""Hook contracts reserved for stage B; the minimal loop does not dispatch them yet.
+"""Injected request, tool and turn hooks. Arguments are detached snapshots.
 
-The transformation/conversion boundary already runs before every model request.
-These DTOs keep request, tool, and turn policy out of the minimal execution loop.
+prepare_request runs on EVERY request after pending inputs have been appended.
+prepare_next_turn runs only when another request is scheduled, never on the first.
+finish_turn: None uses normal scheduling; end skips queue polling; continue is
+satisfied by one natural request, or one context-only request within the budget.
+Error/abort outcomes ignore continuation decisions. Permission failures fail closed.
 """
 
 from collections.abc import Awaitable, Callable
@@ -31,6 +34,12 @@ class BeforeToolCallResult:
 
 @dataclass(slots=True)
 class AfterToolCallResult:
+    """Replace supplied fields, without merging; content invalidates old structured data.
+
+    An existing failure can never be converted into success by a result transformer.
+    None means omitted for optional fields; use content=[] for an empty replacement.
+    """
+
     content: list[TextContent | ImageContent] | None = None
     details: Any = None
     structured_content: Any = None
@@ -45,6 +54,8 @@ class BeforeToolCallContext:
     tool_call: ToolCall
     args: Any
     context: AgentContext
+    parent_call_id: str | None = None
+    depth: int = 0
 
 
 @dataclass(slots=True)
@@ -55,6 +66,8 @@ class AfterToolCallContext:
     result: AgentToolResult
     is_error: bool
     context: AgentContext
+    parent_call_id: str | None = None
+    depth: int = 0
 
 
 @dataclass(slots=True)
@@ -63,6 +76,7 @@ class TurnContext:
     tool_results: list[ToolResultMessage]
     context: AgentContext
     new_messages: list[AgentMessage]
+    turn: int = 0
 
 
 @dataclass(slots=True)
@@ -70,6 +84,8 @@ class PrepareRequestContext:
     context: AgentContext
     model: Model
     thinking_level: str | None = None
+    canonical_messages: list[AgentMessage] | None = None
+    """Unaugmented transcript for rebuilding a request projection without duplication."""
 
 
 @dataclass(slots=True)

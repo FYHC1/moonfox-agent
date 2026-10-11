@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import Any, Literal, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 from pydantic import BaseModel
 
@@ -16,13 +16,19 @@ from moonfox_ai.api import (
     ImageContent,
     Message,
     Model,
+    NestedToolCall,
+    StreamOptions,
     SystemMessage,
     TextContent,
+    ToolCall,
     ToolDeclaration,
     ToolResultMessage,
     Usage,
     UserMessage,
 )
+
+if TYPE_CHECKING:
+    from .hooks import AfterToolCall, BeforeToolCall, FinishTurn, PrepareNextTurn, PrepareRequest
 
 
 class CustomMessage(Protocol):
@@ -39,6 +45,7 @@ type TransformContext = Callable[
     [list[AgentMessage], AbortSignal | None], Awaitable[list[AgentMessage]]
 ]
 type RunReason = Literal["completed", "aborted", "error", "limit_reached"]
+type ToolExecutionMode = Literal["sequential", "parallel"]
 
 
 def default_convert_to_llm(messages: list[AgentMessage]) -> list[Message]:
@@ -49,7 +56,12 @@ def default_convert_to_llm(messages: list[AgentMessage]) -> list[Message]:
             message, (SystemMessage, UserMessage, AssistantMessage, ToolResultMessage)
         ):
             raise TypeError(f"Custom message role {message.role!r} requires convert_to_llm")
-        converted.append(deepcopy(message))
+        snapshot = deepcopy(message)
+        if isinstance(snapshot, ToolResultMessage):
+            snapshot.nested_calls = None
+            snapshot.details = None
+            snapshot.structured_content = None
+        converted.append(snapshot)
     return converted
 
 
@@ -86,20 +98,84 @@ type ToolExecute = Callable[
 
 
 @dataclass(frozen=True, slots=True)
+class ToolCallLimits:
+    """Per-turn limits shared by every top-level and nested invocation."""
+
+    max_depth: int = 8
+    max_calls: int = 128
+
+    def __post_init__(self) -> None:
+        for name, value, minimum in (
+            ("max_depth", self.max_depth, 0),
+            ("max_calls", self.max_calls, 1),
+        ):
+            if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+                raise ValueError(f"{name} must be an integer >= {minimum}")
+
+
+@dataclass(slots=True)
+class AgentToolCallOutcome:
+    tool_call: ToolCall
+    result: AgentToolResult
+    duration_ms: int
+    nested_calls: list[NestedToolCall] = field(default_factory=list)
+
+    @property
+    def is_error(self) -> bool:
+        return self.result.is_error
+
+
+class ToolExecutionContext(Protocol):
+    @property
+    def signal(self) -> AbortSignal | None: ...
+
+    @property
+    def tool_call_id(self) -> str: ...
+
+    @property
+    def parent_call_id(self) -> str | None: ...
+
+    @property
+    def depth(self) -> int: ...
+
+    async def update(self, result: AgentToolResult) -> None: ...
+
+    async def execute_tool(self, name: str, args: dict[str, Any]) -> AgentToolCallOutcome: ...
+
+
+type ContextToolExecute = Callable[[str, Any, ToolExecutionContext], Awaitable[AgentToolResult]]
+
+
+@dataclass(frozen=True, slots=True)
 class AgentTool:
     """Injected implementation with Pydantic input validation.
 
-    execute(call_id, validated_args, signal, on_update) returns a typed result.
-    Updates are awaited; no detached update tasks survive a tool's completion.
-    Use ToolExecutionError/OSError or is_error=True for operational failures.
-    Other exceptions are programmer errors and remain visible to the caller.
+    Supply either the compatible four-argument execute callback or
+    execute_with_context(call_id, validated_args, context), never both.
+    Context-based tools can invoke checked children and send awaited updates.
+    Operational failures use ToolExecutionError/OSError or is_error=True;
+    programmer errors propagate after the tool batch settles and is paired.
     """
 
     name: str
     description: str
     label: str
     parameters: type[BaseModel]
-    execute: ToolExecute
+    execute: ToolExecute | None = None
+    execute_with_context: ContextToolExecute | None = None
+    prepare_arguments: Callable[[Any], Any] | None = None
+    execution_mode: ToolExecutionMode | None = None
+    replay: Literal["never", "safe"] = "never"
+
+    def __post_init__(self) -> None:
+        if not self.name or not isinstance(self.name, str):
+            raise ValueError("Tool name must be a nonempty string")
+        if (self.execute is None) == (self.execute_with_context is None):
+            raise ValueError("Supply exactly one tool execution callback")
+        if self.execution_mode not in (None, "parallel", "sequential"):
+            raise ValueError("Invalid tool execution mode")
+        if self.replay not in ("never", "safe"):
+            raise ValueError("Invalid tool replay policy")
 
     def declaration(self) -> ToolDeclaration:
         return ToolDeclaration(self.name, self.description, self.parameters.model_json_schema())
@@ -111,12 +187,42 @@ class AgentContext:
     tools: list[AgentTool] = field(default_factory=list)
 
 
+class MessageQueue(Protocol):
+    """Nonblocking queue port; peek is required to avoid consuming at the run limit."""
+
+    def has_items(self) -> bool: ...
+
+    def peek(self) -> list[AgentMessage]: ...
+
+    def drain(self) -> list[AgentMessage]: ...
+
+
 @dataclass(slots=True)
 class AgentLoopConfig:
     model: Model
     options: RunOptions
     convert_to_llm: ConvertToLlm = default_convert_to_llm
     transform_context: TransformContext | None = None
+    before_tool_call: BeforeToolCall | None = None
+    after_tool_call: AfterToolCall | None = None
+    finish_turn: FinishTurn | None = None
+    prepare_request: PrepareRequest | None = None
+    prepare_next_turn: PrepareNextTurn | None = None
+    steering_queue: MessageQueue | None = None
+    follow_up_queue: MessageQueue | None = None
+    tool_execution: ToolExecutionMode = "parallel"
+    tool_limits: ToolCallLimits = field(default_factory=ToolCallLimits)
+    thinking_level: str = "off"
+    stream_options: StreamOptions = field(default_factory=StreamOptions)
+    get_api_key: Callable[[str], Awaitable[str | None]] | None = None
+
+    def __post_init__(self) -> None:
+        if self.tool_execution not in ("parallel", "sequential"):
+            raise ValueError("Invalid tool execution mode")
+        if not isinstance(self.options, RunOptions):
+            raise TypeError("AgentLoopConfig requires RunOptions")
+        if not isinstance(self.tool_limits, ToolCallLimits):
+            raise TypeError("AgentLoopConfig requires ToolCallLimits")
 
 
 @dataclass(slots=True)

@@ -248,6 +248,7 @@ async def test_abort_during_tool_pairs_remaining_calls_and_uses_fresh_token_next
             FauxResponse.text("next run"),
         ],
         [make_tool(slow)],
+        tool_execution="sequential",
     )
     agent.subscribe(
         lambda event, token: tokens.append(token) if event.type == "agent_start" else None

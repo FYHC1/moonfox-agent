@@ -1,7 +1,7 @@
 # Moonfox 接口设计：核心与扩展契约
 
 > 当前有效设计，替代 [历史草案](history/DESIGN-v1.md)。整体边界与目录以 [ARCHITECTURE.md](ARCHITECTURE.md) 为准。
-> 下列签名覆盖完整实施路线；阶段 A 已实现的子集以两个核心包的公开 API 与测试为准，尚未实现的应用/扩展接口仍是拟定契约。参考 [mini-pi 设计](../mini-pi/DESIGN.md) 的分层、事件、队列与边界语义。
+> 下列签名覆盖完整实施路线；阶段 A/B 已实现的核心子集以公开 API 与测试为准，尚未实现的应用/扩展接口仍是拟定契约。参考 [mini-pi 设计](../mini-pi/DESIGN.md) 的分层、事件、队列与边界语义。
 
 ## 1. 包归属、公开 API 与可移植性
 
@@ -278,4 +278,4 @@ packages/web-ui 独立构建为静态产物，可随应用发行物托管；业�
 
 ## 8. 状态说明
 
-阶段 A 已完成：ai/agent 独立包、AI 原语、faux provider、最小顺序工具续轮、依赖规则和干净安装验收。双队列运行调度、完整钩子派发、并行/嵌套工具属于阶段 B；应用包、协议、数据库和业务扩展尚未实现。runtime 和扩展管理机制仍规划在 moonfox-app 内，首版不单独发布会话运行时、宿主或 orchestrator。实际验证与下一步见 [HANDOFF.md](HANDOFF.md)；不以旧调研或伪代码作为兼容性证明。
+阶段 A/B 已完成：ai/agent 独立包、AI 原语、faux provider、双队列运行调度、请求/工具/turn 钩子、并行/嵌套工具、取消与预算，以及依赖规则和干净安装验收。应用包、协议、数据库和业务扩展尚未实现；下一步是阶段 C 的 runtime、extension_api、扩展管理与 headless 装配。实际验证与核心行为见 [HANDOFF.md](HANDOFF.md) 和 [Agent 包说明](../../packages/agent/README.md)；不以旧调研或伪代码作为兼容性证明。
