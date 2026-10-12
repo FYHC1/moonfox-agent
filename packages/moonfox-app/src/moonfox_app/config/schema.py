@@ -2,13 +2,13 @@
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from .providers import GenerationParameters
+from .providers import MODEL_ID_MAX_LENGTH, GenerationParameters
 
 
 class SessionSettings(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
-    model_id: str = Field(default="demo", min_length=1, max_length=100)
+    model_id: str = Field(default="demo", min_length=1, max_length=MODEL_ID_MAX_LENGTH)
     thinking_level: str = Field(default="off", min_length=1, max_length=32)
     max_turns_per_run: int = Field(default=4, ge=1, le=128)
     max_requests_per_input: int = Field(default=8, ge=1, le=512)

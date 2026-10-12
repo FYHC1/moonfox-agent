@@ -8,7 +8,9 @@ _VALID = re.compile(r"[A-Za-z0-9_-]{1,64}\Z")
 _PREFIX = "mfx_"
 
 
-def normalize_tool_names(payload: dict[str, Any], *, anthropic: bool) -> dict[str, str]:
+def normalize_tool_names(
+    payload: dict[str, Any], *, anthropic: bool, responses: bool = False
+) -> dict[str, str]:
     """Mutate a freshly built payload and return its wire-to-canonical name map.
 
     Reserve the alias prefix even for already-valid names to prevent collisions with
@@ -17,7 +19,7 @@ def normalize_tool_names(payload: dict[str, Any], *, anthropic: bool) -> dict[st
     """
     references: list[dict[str, Any]] = []
     for tool in payload.get("tools", []):
-        references.append(tool if anthropic else tool["function"])
+        references.append(tool if anthropic or responses else tool["function"])
     for message in payload.get("messages", []):
         if message["role"] != "assistant":
             continue
@@ -25,6 +27,10 @@ def normalize_tool_names(payload: dict[str, Any], *, anthropic: bool) -> dict[st
             references.extend(block for block in message["content"] if block["type"] == "tool_use")
         else:
             references.extend(call["function"] for call in message.get("tool_calls", []))
+    if responses:
+        references.extend(
+            item for item in payload.get("input", []) if item.get("type") == "function_call"
+        )
     forward: dict[str, str] = {}
     reverse: dict[str, str] = {}
     for reference in references:

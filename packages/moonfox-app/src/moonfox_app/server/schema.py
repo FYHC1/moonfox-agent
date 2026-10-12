@@ -5,7 +5,12 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 
 from moonfox_app.config import HostSettings, SessionSettings
-from moonfox_app.config.providers import ModelSettings, ProviderSettings
+from moonfox_app.config.providers import (
+    MODEL_ID_MAX_LENGTH,
+    MODEL_IDENTIFIER,
+    ModelSettings,
+    ProviderSettings,
+)
 
 PROTOCOL_VERSION = 1
 
@@ -225,7 +230,7 @@ class PutModel(RevisionCommand):
 
 
 class ManagedModelView(DTO):
-    id: str
+    id: str = Field(pattern=MODEL_IDENTIFIER, min_length=1, max_length=MODEL_ID_MAX_LENGTH)
     revision: int
     settings: ModelSettings
     available: bool

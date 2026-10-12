@@ -20,13 +20,17 @@ from moonfox_ai.api import (
     HTTPTransport,
     Model,
     OpenAIProvider,
+    OpenAIResponsesProvider,
     StreamOptions,
 )
 from moonfox_app.config import SessionSettings
 from moonfox_app.config.providers import (
     IDENTIFIER,
+    MODEL_ID_MAX_LENGTH,
+    MODEL_IDENTIFIER,
     ModelSettings,
     ProviderSettings,
+    model_id_base,
     validate_parameters,
 )
 from moonfox_app.security.secrets import SecretProtector, SecretStorageError, default_protector
@@ -59,9 +63,12 @@ class ModelCatalog:
             raise InvalidConfiguration("Managed model ID conflicts with a builtin model")
 
     @staticmethod
-    def _identity(identity: str) -> None:
-        if not re.fullmatch(IDENTIFIER, identity):
-            raise InvalidConfiguration("Invalid provider/model identifier")
+    def _identity(identity: str, *, model: bool = False) -> None:
+        pattern = MODEL_IDENTIFIER if model else IDENTIFIER
+        if not isinstance(identity, str) or not re.fullmatch(pattern, identity):
+            raise InvalidConfiguration(
+                "Invalid model identifier" if model else "Invalid provider identifier"
+            )
 
     @staticmethod
     def _revision(value: int) -> None:
@@ -238,9 +245,26 @@ class ModelCatalog:
         )
         return result
 
-    def put_model(self, identity: str, settings: ModelSettings, revision: int) -> dict[str, Any]:
-        self._identity(identity)
+    def _new_model_id(self, settings: ModelSettings) -> str:
+        occupied = set(self._builtin) | {row.id for row in self._rows.models()}
+        base = model_id_base(settings.name)
+        if base not in occupied:
+            return base
+        stem = f"{settings.provider_id}-{base}"[:MODEL_ID_MAX_LENGTH]
+        identity = stem
+        suffix = 2
+        while identity in occupied:
+            ending = f"-{suffix}"
+            identity = stem[: MODEL_ID_MAX_LENGTH - len(ending)] + ending
+            suffix += 1
+        return identity
+
+    def put_model(
+        self, identity: str | None, settings: ModelSettings, revision: int
+    ) -> dict[str, Any]:
         self._revision(revision)
+        if identity is None and revision != 0:
+            raise InvalidConfiguration("Automatic model IDs are only valid for new models")
         if identity in self._builtin:
             raise ConflictError("Builtin models cannot be edited")
         try:
@@ -251,10 +275,13 @@ class ModelCatalog:
             raise InvalidConfiguration(
                 "Model settings are incompatible or outside limits"
             ) from None
+        if identity is None:
+            identity = self._new_model_id(settings)
+        self._identity(identity, model=True)
         return self.model_view(self._rows.put_model(identity, settings, revision))
 
     def delete_model(self, identity: str, revision: int) -> None:
-        self._identity(identity)
+        self._identity(identity, model=True)
         self._revision(revision)
         if identity in self._builtin:
             raise ConflictError("Builtin models cannot be deleted")
@@ -273,7 +300,11 @@ class ModelCatalog:
         return Model(
             id=model.remote_id,
             provider=model.provider_id,
-            api="openai-chat" if provider.protocol == "openai" else "anthropic-messages",
+            api={
+                "openai": "openai-chat",
+                "openai-responses": "openai-responses",
+                "anthropic": "anthropic-messages",
+            }[provider.protocol],
             name=model.name,
             base_url=provider.base_url,
             context_window=model.context_window,
@@ -330,6 +361,16 @@ class ModelCatalog:
                 supports_reasoning=row.settings.supports_reasoning,
             )
             stream = adapter.stream
+        elif provider.settings.protocol == "openai-responses":
+            stream = OpenAIResponsesProvider(
+                self._transport,
+                base_url=provider.settings.base_url,
+                api_key=key,
+                timeout_seconds=float(provider.settings.timeout_seconds),
+                supports_tools=row.settings.supports_tools,
+                supports_images=row.settings.supports_images,
+                supports_reasoning=row.settings.supports_reasoning,
+            ).stream
         else:
             stream = AnthropicProvider(
                 self._transport,
@@ -364,7 +405,7 @@ class ModelCatalog:
         try:
             key = self._credential(provider)
             headers = {"Accept": "application/json"}
-            if provider.settings.protocol == "openai" and key:
+            if provider.settings.protocol in ("openai", "openai-responses") and key:
                 headers["Authorization"] = f"Bearer {key}"
             elif provider.settings.protocol == "anthropic":
                 headers["anthropic-version"] = "2023-06-01"

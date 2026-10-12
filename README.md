@@ -4,7 +4,7 @@
 
 ## 当前可用
 
-- `packages/ai` → `moonfox-ai`：结构化消息、有界事件流、transcript 重放、token 估算、faux 和 OpenAI-compatible / Anthropic 流式适配器；HTTPTransport 由宿主注入，运行时零第三方依赖。
+- `packages/ai` → `moonfox-ai`：结构化消息、有界事件流、transcript 重放、token 估算、faux 和 OpenAI Chat Completions / Responses / Anthropic Messages 流式适配器；HTTPTransport 由宿主注入，运行时零第三方依赖。
 - `packages/agent` → `moonfox-agent-core`：steering/follow-up 双队列、请求/工具/turn 钩子、并行与嵌套工具、参数校验、事件、取消与轮数预算；项目内只依赖 `moonfox-ai`。
 - `packages/moonfox-app` → `moonfox-app`：会话/投影/压缩、扩展宿主、持久 SessionHub、配置授权/审批、逻辑输入预算、共享模型目录，以及可选 HTTP/WS server 和 httpx transport。
 - `packages/web-ui`：独立中文工作台，消费导出的协议 schema；会话/流式消息、提供商与模型 CRUD、凭据只写、模型发现、生成参数、审批和重连恢复，不拥有后台 run。
@@ -15,7 +15,7 @@
 - `examples/minimal_extension/run.py`：显式授权扩展、首轮上下文注入、卸载清理。
 - `examples/application_service.py`：无 Web 依赖的持久输入回执/后台执行示例；`server_smoke.py` 验证可选 API-only 安装。
 
-**尚未实现**：人设/记忆/QQ 具体业务扩展（阶段 E/F），OpenAI Responses/Gemini 原生协议。已有的提供商与模型配置由 WebUI/headless/渠道会话共用，后续 QQ 不另建一套 LLM 配置。核心仍不读取应用配置或启动常驻服务。
+**尚未实现**：人设/记忆/QQ 具体业务扩展（阶段 E/F），Gemini 原生协议。已有的提供商与模型配置由 WebUI/headless/渠道会话共用，后续 QQ 不另建一套 LLM 配置。模型 ID 支持 `-`、`.` 等字符；新建默认使用模型名称，重名加提供商 ID 前缀，已有 ID 保持稳定。核心仍不读取应用配置或启动常驻服务。
 
 ## 开发安装（PowerShell）
 

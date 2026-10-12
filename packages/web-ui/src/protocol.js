@@ -15,6 +15,10 @@ export const providerSettingsSchema = protocol.schemas.PutProvider?.$defs.Provid
 export const modelSettingsSchema = protocol.schemas.PutModel?.$defs.ModelSettings;
 export const generationParametersSchema = protocol.schemas.PutModel?.$defs.GenerationParameters
   ?? protocol.schemas.UpdateConfig.$defs.GenerationParameters;
+// Model identity has a single source: the generated ManagedModelView contract. It is a URL path
+// segment rule, deliberately different from ModelSettings.provider_id; never validate model IDs
+// with the provider pattern.
+export const managedModelIdSchema = protocol.schemas.ManagedModelView.properties.id;
 
 export class ProtocolError extends Error {
   constructor(schema, errors = []) {

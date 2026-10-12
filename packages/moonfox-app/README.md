@@ -83,7 +83,7 @@ I/O 失败尝试回滚整个未成功批次；回滚本身失败时 store 标记
 
 ## 阶段边界与检查
 
-阶段 D 与管理补充已实现应用服务、独立 WebUI、OpenAI-compatible/Anthropic 协议适配；人设/记忆/QQ 具体业务扩展仍未实现。Web 框架通过可选 `server` extra、httpx 通过 `providers` extra 安装；headless 不需要前端构建或 Web 依赖，也可注入自己的传输。
+阶段 D 与管理补充已实现应用服务、独立 WebUI、OpenAI Chat Completions/Responses/Anthropic Messages 协议适配；人设/记忆/QQ 具体业务扩展仍未实现。模型 ID 支持 `-`、`.` 与大小写/中文，新建可省略 `hub.put_model` 的 identity，由共享目录按名称、提供商前缀和序号生成；编辑显示名称不更改已有 ID。Web 框架通过可选 `server` extra、httpx 通过 `providers` extra 安装；headless 不需要前端构建或 Web 依赖，也可注入自己的传输。
 
 根 `python scripts/check.py --installation --web` 检查 Ruff、格式、strict mypy、确定性测试、协议导出一致性、三个包 sdist → wheel、五个干净环境安装、仓库外示例与前端测试/构建。`--web` 需先在 packages/web-ui 执行 npm ci；省略则仅检查 Python。当前实际验证环境为 Windows / Python 3.14.8，未单独实测最低 Python 3.12。
 

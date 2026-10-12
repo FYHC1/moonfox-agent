@@ -61,6 +61,17 @@ def register_provider_routes(app: FastAPI, hub: ServerHub) -> None:
     async def models(request: Request) -> JSONResponse:
         return dto_response(ModelCatalog, await hub.managed_models(principal(request, admin=True)))
 
+    @app.post("/api/v1/models")
+    async def create_model(request: Request) -> JSONResponse:
+        actor = principal(request, admin=True)
+        command = await request_model(request, PutModel)
+        return dto_response(
+            ManagedModelView,
+            await hub.put_model(
+                actor, settings=command.settings, expected_revision=command.expected_revision
+            ),
+        )
+
     @app.put("/api/v1/models/{identity}")
     async def put_model(request: Request, identity: str) -> JSONResponse:
         actor = principal(request, admin=True)

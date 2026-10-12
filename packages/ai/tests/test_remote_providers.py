@@ -17,6 +17,7 @@ from moonfox_ai.api import (
     Model,
     NestedToolCall,
     OpenAIProvider,
+    OpenAIResponsesProvider,
     StreamOptions,
     SystemMessage,
     TextContent,
@@ -34,6 +35,7 @@ from moonfox_ai.providers._sse import InvalidResponse, iter_sse
 
 MODEL = Model("test-model", "test-provider", "test-api", max_tokens=123)
 PROVIDERS = [OpenAIProvider, AnthropicProvider]
+ALL_PROVIDERS = [*PROVIDERS, OpenAIResponsesProvider]
 SECRET = "sk-private-credential"
 
 
@@ -168,6 +170,27 @@ def aend(reason="end_turn", **usage):
 def success(cls):
     if cls is OpenAIProvider:
         return [*oa({"content": "ok"}), *oa(finish="stop"), *frame("[DONE]")]
+    if cls is OpenAIResponsesProvider:
+        identity = {"id": "response-1", "model": "resolved-model"}
+        return [
+            *ae("response.created", response={**identity, "status": "in_progress", "output": []}),
+            *ae(
+                "response.completed",
+                response={
+                    **identity,
+                    "status": "completed",
+                    "output": [
+                        {
+                            "id": "msg-1",
+                            "type": "message",
+                            "role": "assistant",
+                            "status": "completed",
+                            "content": [{"type": "output_text", "text": "ok", "annotations": []}],
+                        }
+                    ],
+                },
+            ),
+        ]
     return [
         *astart(),
         *ae("content_block_start", index=0, content_block={"type": "text", "text": "ok"}),
@@ -196,13 +219,13 @@ def provider(cls, lines=None, **kwargs):
 
 
 def test_public_exports_preserve_existing_surface():
-    for symbol in (OpenAIProvider, AnthropicProvider, HTTPRequest, HTTPResponse, HTTPTransport):
+    for symbol in (*ALL_PROVIDERS, HTTPRequest, HTTPResponse, HTTPTransport):
         assert getattr(api, symbol.__name__) is symbol
         assert symbol.__name__ in api.__all__
     assert "FauxProvider" in api.__all__ and "StreamFn" in api.__all__
 
 
-@pytest.mark.parametrize("cls", PROVIDERS)
+@pytest.mark.parametrize("cls", ALL_PROVIDERS)
 @pytest.mark.parametrize(
     "url",
     [
@@ -230,7 +253,7 @@ def test_constructor_rejects_unsafe_urls_without_echo(cls, url):
     assert not transport.requests
 
 
-@pytest.mark.parametrize("cls", PROVIDERS)
+@pytest.mark.parametrize("cls", ALL_PROVIDERS)
 def test_config_is_immutable_private_and_has_no_construction_io(cls):
     p, transport, _ = provider(cls)
     assert SECRET not in repr(p) and not transport.requests
@@ -356,7 +379,7 @@ async def test_anthropic_sampling_and_stop(sampling):
     assert payload["stop_sequences"] == ["END"] and payload["max_tokens"] == 9
 
 
-@pytest.mark.parametrize("cls", PROVIDERS)
+@pytest.mark.parametrize("cls", ALL_PROVIDERS)
 @pytest.mark.parametrize(
     "options",
     [
@@ -491,7 +514,7 @@ async def test_transcript_replay_tools_and_audit_fields_stay_local(cls):
     assert ctx.messages[:-1] == snapshot[:-1]
 
 
-@pytest.mark.parametrize("cls", PROVIDERS)
+@pytest.mark.parametrize("cls", ALL_PROVIDERS)
 def test_context_brand_pairing_and_tools_capability_before_network(cls):
     p, transport, _ = provider(cls)
     with pytest.raises(TypeError, match="normalized"):
@@ -897,7 +920,7 @@ async def test_anthropic_malformed_order_or_json_is_sanitized(lines):
     assert response.closed
 
 
-@pytest.mark.parametrize("cls", PROVIDERS)
+@pytest.mark.parametrize("cls", ALL_PROVIDERS)
 @pytest.mark.parametrize(
     "status,text",
     [
@@ -941,7 +964,7 @@ async def test_http_failures_never_read_or_expose_body_and_response_hook_is_safe
     assert not response.iterated and response.closed and len(transport.requests) == 1
 
 
-@pytest.mark.parametrize("cls", PROVIDERS)
+@pytest.mark.parametrize("cls", ALL_PROVIDERS)
 @pytest.mark.parametrize("stage", ["open", "read", "close"])
 @pytest.mark.parametrize("error", [OSError(SECRET), TimeoutError(SECRET)])
 async def test_operational_transport_errors_are_sanitized_without_retries(cls, stage, error):
@@ -957,7 +980,7 @@ async def test_operational_transport_errors_are_sanitized_without_retries(cls, s
     assert response.closed == (stage != "open")
 
 
-@pytest.mark.parametrize("cls", PROVIDERS)
+@pytest.mark.parametrize("cls", ALL_PROVIDERS)
 async def test_programmer_failures_are_exceptions_and_still_close(cls):
     response = Response(success(cls))
     bug = AssertionError("transport implementation bug")
@@ -980,7 +1003,7 @@ async def test_programmer_failures_are_exceptions_and_still_close(cls):
     assert exc.value is bug and response.closed
 
 
-@pytest.mark.parametrize("cls", PROVIDERS)
+@pytest.mark.parametrize("cls", ALL_PROVIDERS)
 async def test_preaborted_signal_does_not_open_transport(cls):
     p, transport, response = provider(cls)
     signal = Signal()
@@ -991,7 +1014,7 @@ async def test_preaborted_signal_does_not_open_transport(cls):
     assert not transport.requests and not response.closed
 
 
-@pytest.mark.parametrize("cls", PROVIDERS)
+@pytest.mark.parametrize("cls", ALL_PROVIDERS)
 @pytest.mark.parametrize("stage", ["open", "read"])
 @pytest.mark.parametrize("cancel", ["signal", "close"])
 async def test_cancel_pending_operations_joins_every_owned_task(cls, stage, cancel):
@@ -1016,7 +1039,7 @@ async def test_cancel_pending_operations_joins_every_owned_task(cls, stage, canc
     assert asyncio.all_tasks() == baseline
 
 
-@pytest.mark.parametrize("cls", PROVIDERS)
+@pytest.mark.parametrize("cls", ALL_PROVIDERS)
 async def test_late_open_response_is_closed_when_transport_returns_on_cancel(cls):
     baseline = asyncio.all_tasks()
     gate, signal = Gate(), Signal()
@@ -1032,7 +1055,7 @@ async def test_late_open_response_is_closed_when_transport_returns_on_cancel(cls
     assert asyncio.all_tasks() == baseline
 
 
-@pytest.mark.parametrize("cls", PROVIDERS)
+@pytest.mark.parametrize("cls", ALL_PROVIDERS)
 async def test_terminal_publication_waits_for_close_despite_repeated_cancellation(cls):
     baseline = asyncio.all_tasks()
     gate = Gate()
@@ -1056,7 +1079,7 @@ async def test_terminal_publication_waits_for_close_despite_repeated_cancellatio
     assert asyncio.all_tasks() == baseline
 
 
-@pytest.mark.parametrize("cls", PROVIDERS)
+@pytest.mark.parametrize("cls", ALL_PROVIDERS)
 async def test_successful_result_also_joins_tasks_before_return(cls):
     baseline = asyncio.all_tasks()
     gate = Gate()
@@ -1176,7 +1199,7 @@ async def test_sse_rejects_oversize_invalid_and_unterminated_frames(lines, bound
         _ = [item async for item in iter_sse(Response(lines).iter_lines(), **bounds)]
 
 
-@pytest.mark.parametrize("cls", PROVIDERS)
+@pytest.mark.parametrize("cls", ALL_PROVIDERS)
 async def test_immediate_close_and_cancel_without_signal_settle(cls):
     baseline = asyncio.all_tasks()
     p, _, _ = provider(cls)
@@ -1194,7 +1217,7 @@ async def test_immediate_close_and_cancel_without_signal_settle(cls):
     assert asyncio.all_tasks() == baseline
 
 
-@pytest.mark.parametrize("cls", PROVIDERS)
+@pytest.mark.parametrize("cls", ALL_PROVIDERS)
 @pytest.mark.parametrize("stage", ["open", "read"])
 async def test_adapter_timeout_cancels_uncooperative_transport(cls, stage):
     baseline = asyncio.all_tasks()
@@ -1210,7 +1233,7 @@ async def test_adapter_timeout_cancels_uncooperative_transport(cls, stage):
     assert asyncio.all_tasks() == baseline
 
 
-@pytest.mark.parametrize("cls", PROVIDERS)
+@pytest.mark.parametrize("cls", ALL_PROVIDERS)
 async def test_transport_decode_failure_is_an_operational_error(cls):
     p, _, response = provider(cls, [UnicodeError(SECRET)])
     result = await p.stream(MODEL, context()).result()

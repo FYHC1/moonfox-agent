@@ -1,8 +1,9 @@
 import { el, icon, iconButton, button, badge, note, confirmAction, announce } from './dom.js';
 import { providerSettingsSchema, modelSettingsSchema, isValid } from './protocol.js';
 import { emptyGeneration, generationEditor, generationError } from './generation.js';
+import { autoModelId, modelIdError, modelIdMaxLength } from './model-id.js';
 
-const protocols = { openai: 'OpenAI-compatible · Chat Completions', anthropic: 'Anthropic · Messages' };
+const protocols = { openai: 'OpenAI-compatible · Chat Completions', 'openai-responses': 'OpenAI · Responses', anthropic: 'Anthropic · Messages' };
 const testLabels = { ok: '检测成功', auth_error: '认证失败，请检查密钥或环境变量', unavailable: '端点暂不可用', unsupported: '此端点不支持模型发现，可手工添加', invalid_response: '返回的模型目录无法识别' };
 const field = (label, control, hint) => el('div', { class: 'field' }, el('label', { for: control.id }, label), control, hint && el('p', { class: 'field-hint' }, hint));
 const check = (label, control) => el('label', { class: 'check-option' }, control, el('span', {}, el('strong', {}, label)));
@@ -17,7 +18,7 @@ export function providerFormError(settings, { storage, original, replacing = fal
     const local = url.hostname === 'localhost' || url.hostname === '[::1]' || /^127(?:\.\d{1,3}){3}$/.test(url.hostname);
     if (!['https:', 'http:'].includes(url.protocol) || (url.protocol === 'http:' && !local) || url.username || url.password || url.search || url.hash || /[\\\s?#]/.test(settings.base_url)) throw Error();
   } catch { return '请使用不含凭据、查询参数或片段的 HTTPS 基础地址；HTTP 仅限本机回环地址。'; }
-  if (/\/(chat\/completions|messages|models)\/?$/.test(settings.base_url)) return '请填写 API 基础地址，不要填写 /chat/completions、/messages 或 /models。';
+  if (/\/(chat\/completions|responses|messages|models)\/?$/.test(settings.base_url)) return '请填写 API 基础地址，不要填写 /chat/completions、/responses、/messages 或 /models。';
   if (settings.auth_mode === 'env' && !/^[A-Z][A-Z0-9_]*$/.test(settings.env_var ?? '')) return '环境变量名须以大写字母开头，仅含大写字母、数字和下划线。';
   if (settings.auth_mode === 'stored' && storage === 'env_only') return '此宿主不能保存密钥，请选择环境变量或无认证。';
   if (original?.credential_source === 'stored' && original.key_configured && !replacing && !clearing
@@ -31,6 +32,7 @@ export function modelFormError(settings, protocol) {
   const parameters = settings.parameters ?? emptyGeneration();
   if (parameters.max_tokens != null && parameters.max_tokens > settings.max_output_tokens) return '生成默认值 max_tokens 不能超过模型最大输出 tokens。';
   if (protocol === 'anthropic' && (settings.supports_reasoning || (settings.token_field ?? 'max_tokens') !== 'max_tokens')) return 'Anthropic 暂不支持扩展思考或其他 token 字段。';
+  // Responses maps max_tokens to max_output_tokens itself; token_field only applies to Chat.
   return generationError(parameters, protocol);
 }
 
@@ -271,14 +273,20 @@ export class ProviderManager {
     form.append(el('div', { class: 'management-toolbar' }, el('div', {}, el('h3', {}, title), el('p', { class: 'field-hint' }, revision ? `当前 r${revision} · 按修订保存，不自动覆盖` : '新建 · expected_revision = 0')), button('返回列表', { variant: 'ghost', onClick: () => void this.back() })));
     return form;
   }
-  identifier(kind, original) {
-    return el('input', { id: `${kind}-id`, value: original?.id ?? '', required: true, readOnly: Boolean(original), pattern: modelSettingsSchema.properties.provider_id.pattern.replace('_-', '_\\-'), maxlength: 64, spellcheck: 'false', autocapitalize: 'none' });
+  // Provider IDs keep the original lowercase rule; model IDs use the generated ManagedModelView
+  // contract (see model-id.js) and are validated in JS, never through an HTML `pattern` (its `v`
+  // flag rejects the generated charset).
+  providerIdentifier(original) {
+    return el('input', { id: 'provider-id', value: original?.id ?? '', required: true, readOnly: Boolean(original), pattern: modelSettingsSchema.properties.provider_id.pattern.replace('_-', '_\\-'), maxlength: 64, spellcheck: 'false', autocapitalize: 'none' });
+  }
+  modelIdentifier(original) {
+    return el('input', { id: 'model-id', value: original?.id ?? '', required: true, readOnly: Boolean(original), maxlength: modelIdMaxLength, spellcheck: 'false', autocapitalize: 'none' });
   }
   providerForm() {
     const { original } = this.editor;
     const settings = original?.settings ?? { ...schemaDefaults(providerSettingsSchema), name: '', base_url: '', auth_mode: this.providers.secret_storage === 'env_only' ? 'env' : 'stored' };
     const form = this.formShell(original ? '编辑提供商' : '新建提供商', original?.revision);
-    const id = this.identifier('provider', original);
+    const id = this.providerIdentifier(original);
     const name = el('input', { id: 'provider-name', value: settings.name, required: true, maxlength: providerSettingsSchema.properties.name.maxLength });
     const protocol = el('select', { id: 'provider-protocol' }, Object.entries(protocols).map(([value, label]) => el('option', { value, selected: value === settings.protocol }, label)));
     const base = el('input', { id: 'provider-base-url', type: 'url', value: settings.base_url, required: true, maxlength: providerSettingsSchema.properties.base_url.maxLength, spellcheck: 'false' });
@@ -295,7 +303,7 @@ export class ProviderManager {
     const endpointHint = el('p', { class: 'field-hint', id: 'provider-endpoint-hint' });
     base.setAttribute('aria-describedby', 'provider-endpoint-hint');
     const refresh = () => {
-      base.placeholder = protocol.value === 'openai' ? 'https://api.openai.com/v1' : 'https://api.anthropic.com/v1';
+      base.placeholder = protocol.value === 'anthropic' ? 'https://api.anthropic.com/v1' : 'https://api.openai.com/v1';
       endpointHint.textContent = `基础地址示例：${base.placeholder}。不要追加具体请求路径；HTTP 仅允许 localhost / 回环 IP。`;
       env.disabled = auth.value !== 'env'; env.required = auth.value === 'env';
       key.disabled = envOnly || auth.value !== 'stored' || clear.checked;
@@ -338,7 +346,7 @@ export class ProviderManager {
     const { original, prefill } = this.editor;
     const settings = original?.settings ?? { ...schemaDefaults(modelSettingsSchema), provider_id: this.providers.providers[0]?.id ?? '', name: '', remote_id: '', supports_tools: false, supports_images: false, supports_reasoning: false, parameters: emptyGeneration(), ...prefill };
     const form = this.formShell(original ? '编辑模型' : '新建模型', original?.revision);
-    const id = this.identifier('model', original);
+    const id = this.modelIdentifier(original);
     const name = el('input', { id: 'model-name', value: settings.name, required: true, maxlength: modelSettingsSchema.properties.name.maxLength });
     const remote = el('input', { id: 'model-remote-id', value: settings.remote_id, required: true, maxlength: modelSettingsSchema.properties.remote_id.maxLength, spellcheck: 'false' });
     const providers = [...this.providers.providers];
@@ -351,24 +359,61 @@ export class ProviderManager {
     const images = el('input', { type: 'checkbox', checked: settings.supports_images });
     const reasoning = el('input', { type: 'checkbox', checked: settings.supports_reasoning });
     const tokenField = el('select', { id: 'model-token-field' }, modelSettingsSchema.properties.token_field.enum.map((value) => el('option', { value, selected: value === settings.token_field }, value)));
+    const tokenHint = el('p', { class: 'field-hint' });
     const selectedProtocol = () => this.providers.providers.find((item) => item.id === provider.value)?.settings.protocol;
     const parameters = generationEditor({ value: settings.parameters, prefix: 'model-generation', protocol: selectedProtocol(), modelDefaults: true, onChange: () => { this.dirty = true; } });
     const protocolRepair = el('div');
+    const responsesForbidden = ['frequency_penalty', 'presence_penalty', 'seed', 'stop'];
     const syncProtocol = (changed = false) => {
-      const anthropic = selectedProtocol() === 'anthropic';
-      reasoning.disabled = anthropic; tokenField.disabled = anthropic;
-      if (changed) { if (anthropic) { reasoning.checked = false; tokenField.value = 'max_tokens'; } parameters.setProtocol(selectedProtocol()); }
+      const protocol = selectedProtocol();
+      const anthropic = protocol === 'anthropic';
+      const responses = protocol === 'openai-responses';
+      reasoning.disabled = anthropic; tokenField.disabled = anthropic || responses;
+      tokenHint.textContent = anthropic ? 'Anthropic 固定 max_tokens。'
+        : responses ? 'OpenAI Responses 不使用此控件：适配器固定映射为 max_output_tokens，token_field 不生效。'
+          : 'Chat Completions 选择 max_tokens 或 max_completion_tokens。';
+      // Explicit protocol/provider changes may repair values; initial render only reports them.
+      if (changed) {
+        if (anthropic) reasoning.checked = false;
+        if (anthropic || responses) tokenField.value = 'max_tokens';
+        parameters.setProtocol(protocol);
+      }
       protocolRepair.replaceChildren();
-      if (anthropic && (reasoning.checked || tokenField.value !== 'max_tokens' || ['frequency_penalty', 'presence_penalty', 'seed'].some((key) => parameters.value()[key] != null))) {
-        protocolRepair.append(note('当前保存值包含 Anthropic 不支持的字段，可能是提供商协议已更改。请明确清除后保存。', 'warning',
-          button('清除不支持的字段', { onClick: () => syncProtocol(true) })));
+      const penalties = ['frequency_penalty', 'presence_penalty', 'seed'].some((key) => parameters.value()[key] != null);
+      const incompatible = anthropic
+        ? (reasoning.checked || tokenField.value !== 'max_tokens' || penalties)
+        : responses ? responsesForbidden.some((key) => parameters.value()[key] != null) : false;
+      if (incompatible) protocolRepair.append(note(anthropic ? '当前保存值包含 Anthropic 不支持的字段，可能是提供商协议已更改。请明确清除后保存。'
+        : '当前保存值包含 OpenAI Responses 不支持的字段，可能是提供商协议已更改。请明确清除后保存。', 'warning',
+        button('清除不支持的字段', { onClick: () => syncProtocol(true) })));
+    };
+    // New models preview an automatic ID (same rule as the server, which stays authoritative);
+    // editing an existing model never changes its ID. Clearing the field restores automatic mode.
+    const idHint = el('p', { class: 'field-hint', id: 'model-id-hint' });
+    id.setAttribute('aria-describedby', 'model-id-hint');
+    let autoId = !original;
+    const refreshId = () => {
+      if (original) return;
+      if (autoId) {
+        const occupied = new Set([...this.models.models.map((item) => item.id), ...this.models.builtin_models.map((item) => item.id)]);
+        id.value = autoModelId({ name: name.value, providerId: provider.value, occupied });
+        id.setCustomValidity('');
+        idHint.textContent = '按模型名称自动生成预览；服务端最终确定 ID，冲突时可能追加提供商前缀或序号。手工修改后不再自动更新，清空可恢复自动。';
+      } else {
+        const message = modelIdError(id.value);
+        id.setCustomValidity(message);
+        idHint.textContent = message || '已手工指定模型 ID；清空输入框可恢复自动生成。';
       }
     };
-    provider.addEventListener('change', () => syncProtocol(true)); syncProtocol();
+    if (original) idHint.textContent = '本地目录标识，创建后不可修改；不是远端模型 ID。';
+    id.addEventListener('input', () => { if (original) return; autoId = id.value === ''; refreshId(); });
+    name.addEventListener('input', refreshId);
+    provider.addEventListener('change', () => { syncProtocol(true); refreshId(); });
+    syncProtocol(); refreshId();
     form.append(note('能力与容量不会从模型名称推断。请核对远端文档后填写；初始容量仅为表单默认值，检测与保存不代表已验证兼容性。'),
-      el('div', { class: 'management-form-grid' }, field('模型 ID', id, '本地目录标识，创建后不可修改；不是远端模型 ID。'), field('模型名称', name),
+      el('div', { class: 'management-form-grid' }, el('div', { class: 'field' }, el('label', { for: id.id }, '模型 ID'), id, idHint), field('模型名称', name),
         field('所属提供商', provider), field('远端模型 ID', remote), field('上下文窗口（tokens）', context), field('最大输出 tokens', output),
-        field('OpenAI 输出 token 字段', tokenField, 'Chat Completions 选择 max_tokens 或 max_completion_tokens；Anthropic 固定 max_tokens。'),
+        el('div', { class: 'field' }, el('label', { for: tokenField.id }, 'OpenAI 输出 token 字段'), tokenField, tokenHint),
         el('div', { class: 'field-stack' }, check('启用此模型', enabled), check('支持工具调用', tools), check('支持图片输入', images), check('支持思考级别（仅 OpenAI）', reasoning))),
       protocolRepair,
       el('section', { class: 'management-generation' }, el('h3', {}, '模型生成参数 · 默认值'), parameters.element));
@@ -381,7 +426,13 @@ export class ProviderManager {
         supports_tools: tools.checked, supports_images: images.checked, supports_reasoning: reasoning.checked, token_field: tokenField.value, parameters: parameters.value() };
       validation.textContent = modelFormError(next, selectedProtocol());
       if (validation.textContent) return;
-      void this.perform(() => this.api.putModel(id.value, { ...revisionBody(original?.revision ?? 0), settings: next }, this.abort.signal));
+      if (original) { void this.perform(() => this.api.putModel(original.id, { ...revisionBody(original.revision), settings: next }, this.abort.signal)); return; }
+      if (autoId) {
+        // Automatic IDs are assigned server-side (collision fallback); refresh the catalog afterwards.
+        void this.perform(() => this.api.createModel({ ...revisionBody(0), settings: next }, this.abort.signal), { message: '模型已创建；服务端可能按冲突规则调整最终 ID，目录已刷新。' });
+        return;
+      }
+      void this.perform(() => this.api.putModel(id.value, { ...revisionBody(0), settings: next }, this.abort.signal));
     });
     return form;
   }

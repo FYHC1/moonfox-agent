@@ -137,6 +137,16 @@ export class ApiClient {
     });
   }
 
+  // POST /api/v1/models: the server assigns the model ID (collision fallback). Same DTO validation
+  // as putModel, but expected_revision must be 0 and there is never an automatic retry.
+  async createModel(body, signal) {
+    assertContract('PutModel', body);
+    if (body.expected_revision !== 0) throw new ProtocolError('PutModel');
+    return this.request('/models', {
+      method: 'POST', body, inputSchema: 'PutModel', outputSchema: 'ManagedModelView', signal,
+    });
+  }
+
   testProvider(id, body, signal) {
     return this.request(`/providers/${encodeURIComponent(id)}/test`, {
       method: 'POST', body, inputSchema: 'RevisionCommand', outputSchema: 'ProviderTestResult', signal, timeout: Math.max(this.timeout, 40000),

@@ -197,6 +197,7 @@ def test_environment_mode_never_copies_key_to_database(tmp_path):
         "https://example.com/v1#x",
         "file:///secret",
         "https://example.com/v1/chat/completions",
+        "https://example.com/v1/responses",
         "https://example.com/v1/../models",
         "https://example.com/\npath",
     ],
@@ -375,4 +376,180 @@ async def test_probe_repeated_cancellation_waits_for_response_cleanup(tmp_path):
     with pytest.raises(asyncio.CancelledError):
         await task
     assert response.closed
+    store.close()
+
+
+@pytest.mark.parametrize(
+    "identity", ["gpt-4.1", "GPT-4.1-mini", "模型-2.5", "qwen2.5:32b", "x" * 200]
+)
+def test_model_identifiers_preserve_names_and_are_not_provider_slugs(tmp_path, identity):
+    store, values = catalog(tmp_path)
+    values.put_provider("first", provider(auth_mode="none"), expected_revision=0)
+    created = values.put_model(identity, model(), 0)
+    assert created["id"] == identity and created["available"]
+    settings = SessionSettings(model_id=identity)
+    assert values.resolve(settings).model.id == "remote-a"
+    values.put_model(identity, model().model_copy(update={"name": "renamed"}), 1)
+    assert values.models()["models"][0]["id"] == identity
+    values.delete_model(identity, 2)
+    assert values.models()["models"] == []
+    with pytest.raises(InvalidConfiguration):
+        values.put_provider("gpt-4.1", provider(auth_mode="none"), expected_revision=0)
+    store.close()
+
+
+@pytest.mark.parametrize(
+    "identity",
+    [
+        "",
+        ".",
+        "..",
+        ".hidden",
+        "name/child",
+        "name\\child",
+        "has space",
+        "a?b",
+        "a#b",
+        "a%b",
+        "bad\n",
+        "a\x00b",
+        "x" * 201,
+    ],
+)
+def test_model_identifiers_reject_ambiguous_url_segments(tmp_path, identity):
+    store, values = catalog(tmp_path)
+    values.put_provider("first", provider(auth_mode="none"), expected_revision=0)
+    with pytest.raises(InvalidConfiguration):
+        values.put_model(identity, model(), 0)
+    assert values.models()["models"] == []
+    store.close()
+
+
+def test_automatic_ids_prefer_name_then_provider_then_suffix_including_builtins(tmp_path):
+    store, values = catalog(tmp_path)
+    for identity in ("first", "second"):
+        values.put_provider(identity, provider(auth_mode="none"), expected_revision=0)
+    first = model().model_copy(update={"name": "gpt-4.1"})
+    second = first.model_copy(update={"provider_id": "second"})
+    assert values.put_model(None, first, 0)["id"] == "gpt-4.1"
+    assert values.put_model(None, second, 0)["id"] == "second-gpt-4.1"
+    assert values.put_model(None, second, 0)["id"] == "second-gpt-4.1-2"
+    assert values.put_model(None, first, 0)["id"] == "first-gpt-4.1"
+    assert (
+        values.put_model(None, first.model_copy(update={"name": "demo"}), 0)["id"] == "first-demo"
+    )
+    with pytest.raises(InvalidConfiguration):
+        values.put_model(None, first, 1)
+    with pytest.raises(ConflictError):
+        values.put_model("gpt-4.1", second, 0)
+    assert store.providers.model("gpt-4.1").settings.provider_id == "first"
+    store.close()
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("GPT-4.1", "GPT-4.1"),
+        ("模型 A.2", "模型-A.2"),
+        ("Qwen/Qwen2.5", "Qwen-Qwen2.5"),
+        ("...", "model"),
+        (".hidden", "hidden"),
+        ("name?#%suffix", "name-suffix"),
+    ],
+)
+def test_automatic_ids_sanitize_only_unsafe_path_characters(tmp_path, name, expected):
+    store, values = catalog(tmp_path)
+    values.put_provider("first", provider(auth_mode="none"), expected_revision=0)
+    assert values.put_model(None, model().model_copy(update={"name": name}), 0)["id"] == expected
+    store.close()
+
+
+async def test_auto_id_default_and_session_survive_restart_and_display_name_edit(tmp_path):
+    long_provider = "p" * 64
+    long_name = "模型-4.1" + "x" * 94
+    hub = create_application(home=tmp_path, models={}, secret_protector=TestProtector())
+    await hub.start()
+    await hub.put_provider(
+        OWNER, long_provider, settings=provider(auth_mode="none"), expected_revision=0
+    )
+    settings = ModelSettings(provider_id=long_provider, name=long_name, remote_id="remote")
+    first = await hub.put_model(OWNER, settings=settings, expected_revision=0)
+    duplicate = await hub.put_model(OWNER, settings=settings, expected_revision=0)
+    identity = duplicate["id"]
+    assert first["id"] == long_name and identity == f"{long_provider}-{long_name}"
+    assert len(identity) > 100
+    revision = (await hub.managed_models(OWNER))["config_revision"]
+    await hub.set_default_model(OWNER, identity, expected_revision=revision)
+    session = await hub.create_session(OWNER, title="stable", request_id="session")
+    await hub.put_model(
+        OWNER,
+        identity,
+        settings=settings.model_copy(update={"name": "new name"}),
+        expected_revision=1,
+    )
+    await hub.aclose()
+    hub = create_application(home=tmp_path, models={}, secret_protector=TestProtector())
+    await hub.start()
+    try:
+        assert (await hub.config(OWNER))["settings"]["defaults"]["model_id"] == identity
+        snapshot = await hub.snapshot(OWNER, session["id"])
+        assert snapshot["settings"]["model_id"] == identity
+        rows = (await hub.managed_models(OWNER))["models"]
+        assert next(row for row in rows if row["id"] == identity)["settings"]["name"] == "new name"
+        with pytest.raises(ConflictError):
+            await hub.delete_model(OWNER, identity, expected_revision=2)
+    finally:
+        await hub.aclose()
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        GenerationParameters(stop=()),
+        GenerationParameters(stop=("END",)),
+        GenerationParameters(seed=0),
+        GenerationParameters(frequency_penalty=0),
+        GenerationParameters(presence_penalty=0),
+    ],
+)
+def test_responses_rejects_chat_only_parameters_for_models_and_sessions(tmp_path, params):
+    store, values = catalog(tmp_path)
+    responses = provider(protocol="openai-responses", auth_mode="none")
+    values.put_provider("first", responses, expected_revision=0)
+    with pytest.raises(InvalidConfiguration):
+        values.put_model("gpt-4.1", model(parameters=params), 0)
+    values.put_model("gpt-4.1", model(supports_reasoning=True), 0)
+    with pytest.raises(InvalidConfiguration):
+        values.validate_session(SessionSettings(model_id="gpt-4.1", generation=params))
+    settings = SessionSettings(model_id="gpt-4.1", thinking_level="high")
+    assert values.resolve(settings).model.api == "openai-responses"
+    assert values.resolve(settings).model.reasoning
+    store.close()
+
+
+async def test_responses_discovery_uses_bearer_and_protocol_switch_checks_existing_defaults(
+    tmp_path,
+):
+    transport = Transport()
+    store, values = catalog(tmp_path, transport=transport)
+    values.put_provider(
+        "first", provider(), expected_revision=0, secret_action="replace", api_key="synthetic-key"
+    )
+    values.put_model("gpt-4.1", model(parameters=GenerationParameters(stop=("END",))), 0)
+    responses = provider(protocol="openai-responses")
+    with pytest.raises(ConflictError):
+        values.put_provider("first", responses, expected_revision=1)
+    with pytest.raises(InvalidConfiguration):
+        values.put_provider(
+            "first", responses, expected_revision=1, secret_action="replace", api_key="new-key"
+        )
+    values.put_model("gpt-4.1", model(), 1)
+    values.put_provider(
+        "first", responses, expected_revision=1, secret_action="replace", api_key="new-key"
+    )
+    assert (await values.test_provider("first", 2))["ok"]
+    request = transport.requests[0]
+    assert request.method == "GET" and request.url.endswith("/models")
+    assert request.headers["Authorization"] == "Bearer new-key" and request.payload is None
+    assert values.resolve(SessionSettings(model_id="gpt-4.1")).model.api == "openai-responses"
     store.close()

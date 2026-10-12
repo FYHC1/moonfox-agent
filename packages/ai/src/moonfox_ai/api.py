@@ -13,6 +13,7 @@ from .providers.base import AbortSignal, ProviderResponse, StreamFn, StreamOptio
 from .providers.faux import FauxProvider, FauxResponse, FauxScriptExhausted
 from .providers.http import HTTPRequest, HTTPResponse, HTTPTransport
 from .providers.openai import OpenAIProvider
+from .providers.openai_responses import OpenAIResponsesProvider
 from .stream import (
     AssistantMessageEventStream,
     EventStream,
@@ -97,6 +98,7 @@ __all__ = [
     "Model",
     "NestedToolCall",
     "OpenAIProvider",
+    "OpenAIResponsesProvider",
     "ProviderResponse",
     "Start",
     "StopReason",

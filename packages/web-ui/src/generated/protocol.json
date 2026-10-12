@@ -280,7 +280,7 @@
             },
             "model_id": {
               "default": "demo",
-              "maxLength": 100,
+              "maxLength": 200,
               "minLength": 1,
               "title": "Model Id",
               "type": "string"
@@ -777,6 +777,9 @@
           "type": "boolean"
         },
         "id": {
+          "maxLength": 200,
+          "minLength": 1,
+          "pattern": "^[^./\\\\?#%\\s\\x00-\\x1f\\x7f][^/\\\\?#%\\s\\x00-\\x1f\\x7f]{0,199}$",
           "title": "Id",
           "type": "string"
         },
@@ -991,6 +994,9 @@
               "type": "boolean"
             },
             "id": {
+              "maxLength": 200,
+              "minLength": 1,
+              "pattern": "^[^./\\\\?#%\\s\\x00-\\x1f\\x7f][^/\\\\?#%\\s\\x00-\\x1f\\x7f]{0,199}$",
               "title": "Id",
               "type": "string"
             },
@@ -1142,6 +1148,7 @@
         "ProviderProtocol": {
           "enum": [
             "openai",
+            "openai-responses",
             "anthropic"
           ],
           "type": "string"
@@ -1345,6 +1352,7 @@
         "ProviderProtocol": {
           "enum": [
             "openai",
+            "openai-responses",
             "anthropic"
           ],
           "type": "string"
@@ -1666,6 +1674,7 @@
         "ProviderProtocol": {
           "enum": [
             "openai",
+            "openai-responses",
             "anthropic"
           ],
           "type": "string"
@@ -2324,7 +2333,7 @@
             },
             "model_id": {
               "default": "demo",
-              "maxLength": 100,
+              "maxLength": 200,
               "minLength": 1,
               "title": "Model Id",
               "type": "string"
@@ -2716,7 +2725,7 @@
             },
             "model_id": {
               "default": "demo",
-              "maxLength": 100,
+              "maxLength": 200,
               "minLength": 1,
               "title": "Model Id",
               "type": "string"
@@ -2973,7 +2982,7 @@
             },
             "model_id": {
               "default": "demo",
-              "maxLength": 100,
+              "maxLength": 200,
               "minLength": 1,
               "title": "Model Id",
               "type": "string"

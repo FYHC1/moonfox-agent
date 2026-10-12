@@ -12,7 +12,7 @@
 4. [mini-pi 参考](../mini-pi/DESIGN.md)：模型/Agent/会话/应用分层及关键接缝。保留参考设计，不将伪代码直接视为已验证实现。
 5. [应用包说明](../../packages/moonfox-app/README.md)：阶段 C 的实际 API、存储耐久性、扩展授权与生命周期、prompt/压缩和示例。
 6. [阶段 D 说明](STAGE-D.md) 与 [HTTP/WS 契约](STAGE-D-PROTOCOL.md)：启动/开发、配置/预算/恢复、协议与前端验收。
-7. [提供商与模型管理](PROVIDER-MANAGEMENT.md)：共享持久目录、两种实际协议、凭据安全、模型默认值/会话覆盖与管理 API。
+7. [提供商与模型管理](PROVIDER-MANAGEMENT.md)：共享持久目录、Chat Completions/Responses/Messages 三种实际协议、凭据安全、名称默认 ID、模型默认值/会话覆盖与管理 API。
 
 ## 包布局（规划）
 

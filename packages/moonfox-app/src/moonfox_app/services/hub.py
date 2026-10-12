@@ -483,7 +483,7 @@ class SessionHub:
     async def put_model(
         self,
         principal: Principal,
-        identity: str,
+        identity: str | None = None,
         *,
         settings: ModelSettings,
         expected_revision: int,

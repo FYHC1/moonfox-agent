@@ -400,6 +400,7 @@ class RemoteProvider:
         consume: Consume,
         *,
         anthropic: bool = False,
+        responses: bool = False,
     ) -> AssistantMessageEventStream:
         headers = {"Accept": "text/event-stream", "Content-Type": "application/json"}
         seen: set[str] = set()
@@ -422,7 +423,7 @@ class RemoteProvider:
                 headers["x-api-key"] = key
         elif key:
             headers["Authorization"] = f"Bearer {key}"
-        tool_names = normalize_tool_names(payload, anthropic=anthropic)
+        tool_names = normalize_tool_names(payload, anthropic=anthropic, responses=responses)
         if options.on_payload is not None:
             payload = deepcopy(payload)
             replacement = options.on_payload(payload, model)

@@ -2,17 +2,17 @@
 
 > **用途**：当前实施交接文档，保留设计决策并记录已验证的阶段进展。新会话从本页继续，无需回溯历史对话。
 >
-> **当前状态**：**阶段 A–D 与提供商基础管理补充已实现并验收**。多提供商/模型/只写凭据/生成参数通过应用共享目录持久化，WebUI、headless 与后续 QQ 共用；E/F 尚未开始。
+> **当前状态**：**阶段 A–D、提供商基础管理及 Responses/模型 ID 补充已实现并验收**。三种协议、多提供商/模型/只写凭据/生成参数通过应用共享目录持久化，WebUI、headless 与后续 QQ 共用；E/F 尚未开始。
 
 ---
 
 ## 0. 一句话状态
 
-阶段 C 已先推送 `012211b`，D 基线已先推送 `15b5694`，远程核对一致后才追加本轮管理补充。新增标准库 AI 协议适配、应用 ModelCatalog/凭据保护、WebUI 管理；Agent 核心保持不变。启动见 [STAGE-D.md](STAGE-D.md)，具体管理契约见 [PROVIDER-MANAGEMENT.md](PROVIDER-MANAGEMENT.md)。
+阶段 C `012211b`、D `15b5694`、管理基线 `4c0d69b` 已先推送并核对远程。本轮在其上增加真正的 OpenAI Responses 适配，以及独立模型 ID 校验、名称默认 ID 和服务端查重；Agent 核心保持不变。启动见 [STAGE-D.md](STAGE-D.md)，具体管理契约见 [PROVIDER-MANAGEMENT.md](PROVIDER-MANAGEMENT.md)。
 
 ### 当前代码边界
 
-- `moonfox_ai.api`：消息/事件、有界单消费者流、transcript 重放、估算/溢出、faux、OpenAI-compatible Chat Completions / Anthropic Messages；HTTPTransport 注入，仍仅依赖标准库。
+- `moonfox_ai.api`：消息/事件、有界单消费者流、transcript 重放、估算/溢出、faux、OpenAI-compatible Chat Completions / OpenAI Responses / Anthropic Messages；HTTPTransport 注入，仍仅依赖标准库。
 - `moonfox_agent.api`：steering/follow-up 双队列（one_at_a_time/all）、完整请求/工具/turn 钩子、并行/串行工具、受检嵌套调用、事件、取消和显式运行预算；项目内仅依赖 ai。
 - `continue_`、`reset`、状态替换/模型/工具设置均提供公开入口；运行中修改规范状态被拒绝，取消须等待 idle。
 - 默认工具执行改为 parallel；任一工具 sequential 覆盖使整批串行。阶段 A 四参数 execute 保持兼容，嵌套调用使用新增 execute_with_context 与 ctx.execute_tool。
@@ -22,11 +22,11 @@
 
 - `python scripts/check.py --installation --web`：Ruff、格式、strict mypy、Python 单元/架构/独立安装、协议导出一致性和前端测试/构建。浏览器另外执行 `npm.cmd --prefix packages/web-ui run test:browser`。
 - 阶段 B 最终实测：完整验收 **209 passed**；Agent 专项 **126 passed**；mypy strict 检查 **19** 个源码文件；coverage 启用分支统计的总覆盖率 **97%**（非 100% 分支覆盖）。
-- 阶段 C 基线 448 passed、D 基线 576 passed；本轮管理补充 **804 passed**（含安装）、strict mypy **86** 个源码文件，Ruff 格式 **128** 文件。
+- 阶段 C 基线 448 passed、D 基线 576 passed、管理基线 804 passed；当前 Responses/ID 补充 **947 passed**（含安装）、strict mypy **88** 个源码文件，Ruff 格式 **131** 文件；前端 **58** 单元测试、构建与 **14/14** Edge 浏览器测试通过。
 - 安装验收三个包 sdist → wheel，五个干净环境：AI 单包、Agent、headless app、依次目录安装、server/providers extras。普通核心/headless 不安装 Web 框架、httpx 或前端产物。
 - 六个示例复制到仓库外用 `python -I`：core_only/core_stage_b、headless_app/minimal_extension、application_service/server_smoke。后两者验证 durable 接收/完成分离和 API-only 安装。
 - 实测 Windows / Python 3.14.8；声明最低 Python 3.12，但本机没有对 3.12 单独执行测试。开发工具安装在本会话 scratch 虚拟环境，不改全局 Python。
-- Git 分支 `main`，公开仓库 `https://github.com/FYHC1/moonfox-agent`；阶段 A `a92898f`、B `cb9ce06`、C `012211b`、D `15b5694` 已推送；管理补充由本轮提交记录，最新哈希/推送状态以 Git 为准。使用仓库局部 noreply 身份与 GitHub CLI 凭据，不把 token 写入项目。
+- Git 分支 `main`，公开仓库 `https://github.com/FYHC1/moonfox-agent`；阶段 A `a92898f`、B `cb9ce06`、C `012211b`、D `15b5694`、管理基线 `4c0d69b` 已推送；Responses/ID 补充由本轮提交记录，最新哈希/推送状态以 Git 为准。使用仓库局部 noreply 身份与 GitHub CLI 凭据，不把 token 写入项目。
 - **阶段交付规则（用户确认）**：每完成一个阶段，先完成相关验收，提交并推送 GitHub、核对本地/远程哈希一致，再开始下一阶段。阶段 C 推送必须先于阶段 D 实现。
 
 实现修正参考伪代码：取消信号以 AI 层协议表示，避免反向依赖；流不是广播，溢出明确失败且最终结果可等待；未终止流确定性报错；快照采用深拷贝；未知自定义消息要求显式 codec，编程错误不冒充模型失败。
@@ -71,11 +71,21 @@
 
 - 管理员多提供商/模型 CRUD/CAS、启停、显式模型发现、默认模型、模型生成默认值和会话覆盖；空主机可直接管理。WebUI 不是平行配置源，headless/未来 QQ 走同一 ModelCatalog/预算网关。
 - Windows 当前用户 DPAPI，其他平台环境变量引用或注入 SecretProtector；凭据 keep/replace/clear，只写不回显，改 stored-key 地址需重新输入/清除。发现只 GET /models，不发聊天/生成，HTTPS（loopback 可 HTTP），不跟重定向，不用环境代理。
-- 真实双协议流式适配、文本/用户图片/工具往返/用量/取消与关闭；工具命名空间映射为稳定协议别名后恢复原名。AI 不引入 HTTP 客户端，httpx 为应用可选依赖；不自动重试，不实现 Responses/Gemini/Anthropic 扩展思考。
+- 管理基线接通 Chat Completions/Messages 双协议流式适配、文本/用户图片/工具往返/用量/取消与关闭；工具命名空间映射为稳定协议别名后恢复原名。AI 不引入 HTTP 客户端，httpx 为应用可选依赖；不自动重试。Responses 后续补充见下一节；Gemini/Anthropic 扩展思考仍不实现。
 - 每 run 冻结端点/凭据/模型/参数，编辑下一 run 生效；停用/无凭据历史仍可读。null 继承、0 保留、stop=[] 明确清空；预算准入限制输出。SQLite v1→v2 追加迁移，旧 session JSON 自动补 generation 默认值。
 - 实测：完整 **804 Python tests**；应用专项 **379 passed**，启用 branch 后总覆盖率 **89%**（非分支覆盖率）；strict mypy **86** 源文件、格式 **128** 文件；前端 **50** 单元测试、构建、**11/11** Edge 浏览器夹具通过。
 - 真实 CLI（不带 --demo）+ 本机合成 HTTP/SSE + Edge：空目录新增两个提供商、发现/录入模型、默认选择、模型默认和会话参数覆盖进入实际 HTTP 请求、刷新和进程重启恢复 DPAPI/配置/历史；390px 无横向溢出、页面 JS 错误 0、local/sessionStorage 均空。工具续轮两协议/图片/小片段/取消清理/渠道目录共享另有本地网络测试。无真实 API key/付费请求，临时数据和截图在 scratch。
 - 原 8765 预览仅为可丢弃的离线演示，不是用户正式模型配置目录。具体限制、API 和启动步骤见 PROVIDER-MANAGEMENT。
+
+### Responses 协议与模型 ID 补充
+
+- `openai-responses` / `OpenAIResponsesProvider` 实际 POST `/responses`：input、instructions、扁平函数声明、function_call_output 续轮，max_tokens 映射 max_output_tokens。支持文本/拒绝内容/图片输入与图片工具结果、推理摘要/同提供商同模型加密 reasoning 回放、用量、length 截断和受保护取消；使用 store:false，不依赖远端会话存储。禁止 stop（包括 []）、penalties、seed。
+- 提供商 slug 不变；模型 ID 独立支持大小写、中文、`-`、`.` 等，最多 200 字符，不含空白/控制字符或路径保留字符、不以 `.` 开头。新建默认模型名称，冲突使用提供商前缀，再冲突加序号；规范化不安全字符。已有 ID、默认值和会话引用不自动改名。
+- POST `/api/v1/models`（PutModel，expected_revision=0）由共享目录分配 ID；headless 的 hub.put_model 可省略 identity 使用同一规则。手工 ID 仍用 PUT，CAS 不覆盖。WebUI 自动预览但以服务端最终 ID 为准，支持手工覆盖和清空恢复自动；编辑已有名称不改 ID。
+- 前后端协议 schema 已重新生成。协议切换只在明确操作时清空不支持字段，初次渲染不静默修改；Responses 的 Chat token_field 控件不生效，保留旧值不阻止保存。地址/协议变更仍要求显式更新已存密钥。
+- 最终运行 `scripts/check.py --installation --web`：**947 Python tests**、strict mypy **88** 文件、Ruff/格式 **131** 文件、**58 JS tests** 和生产构建通过；`npm.cmd --prefix packages/web-ui run test:browser`：**14/14 Edge 测试通过**。未重新计算覆盖率。
+- 本机 HTTP/SSE 验证三协议工具续轮、图片/小片段、取消关闭；Responses 思考级别/参数映射、配置与凭据按 run 冻结、输出预算/渠道共享；API 与恢复测试验证 ID 查重、Unicode 路径、长前缀 ID、默认与会话持久引用。浏览器验证新协议、参数修复、发现预填、自动/手工 ID、过时目录冲突和既有功能回归。
+- 全部使用合成凭据与本机夹具，无真实厂商付费请求；原有 Starlette/httpx 弃用警告保留，不影响验收。现有演示服务与数据未重启/改写；使用新适配器需重启后端并刷新页面。生产前端已重新构建。
 
 ### 下一步：阶段 E
 

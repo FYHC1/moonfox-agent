@@ -9,7 +9,10 @@ from urllib.parse import urlsplit, urlunsplit
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 IDENTIFIER = r"^[a-z][a-z0-9_-]{0,63}$"
-type ProviderProtocol = Literal["openai", "anthropic"]
+# Model references are URL path segments, not provider slugs. Preserve case and Unicode.
+MODEL_ID_MAX_LENGTH = 200
+MODEL_IDENTIFIER = r"^[^./\\?#%\s\x00-\x1f\x7f][^/\\?#%\s\x00-\x1f\x7f]{0,199}$"
+type ProviderProtocol = Literal["openai", "openai-responses", "anthropic"]
 
 
 class GenerationParameters(BaseModel):
@@ -74,7 +77,7 @@ class ProviderSettings(BaseModel):
                 if not local:
                     raise ValueError("Plain HTTP is only allowed for loopback providers")
             path = parts.path.rstrip("/")
-            if path.endswith(("/chat/completions", "/messages", "/models")):
+            if path.endswith(("/chat/completions", "/responses", "/messages", "/models")):
                 raise ValueError("Use the API base URL, not an individual endpoint")
             if any(segment in (".", "..") for segment in path.split("/")):
                 raise ValueError("Base URL cannot contain path traversal segments")
@@ -148,7 +151,7 @@ def validate_parameters(
         raise ValueError("Output tokens exceed model limit")
     if thinking_level != "off" and (
         not settings.supports_reasoning
-        or provider.protocol != "openai"
+        or provider.protocol not in ("openai", "openai-responses")
         or thinking_level not in ("low", "medium", "high")
     ):
         raise ValueError("Thinking level is not supported by this model/protocol")
@@ -165,5 +168,16 @@ def validate_parameters(
             value is not None
             for value in (values.frequency_penalty, values.presence_penalty, values.seed)
         ):
-            raise ValueError("Penalties and seed are only supported for OpenAI-compatible models")
+            raise ValueError("Penalties and seed are only supported for Chat Completions")
+    if provider.protocol == "openai-responses" and any(
+        value is not None
+        for value in (values.frequency_penalty, values.presence_penalty, values.seed, values.stop)
+    ):
+        raise ValueError("Responses does not support penalties, seed or stop sequences")
     return values
+
+
+def model_id_base(name: str) -> str:
+    """Keep model names readable while avoiding ambiguous or unsafe URL path segments."""
+    value = re.sub(r"[/\\?#%\s\x00-\x1f\x7f]+", "-", name.strip()).lstrip(".")
+    return (value or "model")[:MODEL_ID_MAX_LENGTH]

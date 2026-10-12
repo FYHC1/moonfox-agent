@@ -6,6 +6,7 @@ const labels = {
   frequency_penalty: '频率惩罚 · frequency_penalty', presence_penalty: '存在惩罚 · presence_penalty', seed: '随机种子 · seed',
 };
 const openaiOnly = ['frequency_penalty', 'presence_penalty', 'seed'];
+const responsesForbidden = ['frequency_penalty', 'presence_penalty', 'seed', 'stop'];
 
 export function emptyGeneration() {
   return Object.fromEntries(Object.keys(generationParametersSchema.properties).map((key) => [key, null]));
@@ -22,12 +23,17 @@ export function generationError(values, protocol) {
     if (values.temperature != null && values.top_p != null) return 'Anthropic 只能设置温度或 top_p 之一，另一个请留空。';
     if (openaiOnly.some((key) => values[key] != null)) return 'Anthropic 暂不支持惩罚参数与随机种子。';
   }
+  if (protocol === 'openai-responses' && responsesForbidden.some((key) => values[key] != null)) {
+    return 'OpenAI Responses 不支持惩罚参数、随机种子或停止词（这些字段必须为 null）。';
+  }
   return '';
 }
 
 // Only unsupported fields are cleared on an explicit protocol change, never on initial render.
 export function generationForProtocol(values, protocol) {
-  return protocol === 'anthropic' ? { ...values, frequency_penalty: null, presence_penalty: null, seed: null } : { ...values };
+  if (protocol === 'anthropic') return { ...values, frequency_penalty: null, presence_penalty: null, seed: null };
+  if (protocol === 'openai-responses') return { ...values, frequency_penalty: null, presence_penalty: null, seed: null, stop: null };
+  return { ...values };
 }
 
 export function generationEditor({ value, prefix, disabled = false, protocol, modelDefaults = false, onChange }) {
@@ -66,10 +72,13 @@ export function generationEditor({ value, prefix, disabled = false, protocol, mo
       el('p', { class: 'field-hint' }, modelDefaults ? '每行 1–200 字符；留空使用协议默认，勾选下方表示明确不设停止词。' : '每行 1–200 字符；空白输入表示继承，不会清除模型默认停止词。'),
       el('label', { class: 'check-option', for: clear.id }, clear, el('span', {}, el('strong', {}, '明确清空停止词（发送 []）')))), error);
   function refresh() {
-    for (const [key, input] of controls) input.disabled = disabled || (currentProtocol === 'anthropic' && openaiOnly.includes(key));
+    const responses = currentProtocol === 'openai-responses';
+    for (const [key, input] of controls) input.disabled = disabled || (currentProtocol === 'anthropic' && openaiOnly.includes(key)) || (responses && responsesForbidden.includes(key));
     controls.get('temperature').max = currentProtocol === 'anthropic' ? 1 : generationParametersSchema.properties.temperature.anyOf.find((item) => item.type === 'number').maximum;
-    stop.disabled = disabled || clear.checked;
-    protocolHint.textContent = currentProtocol === 'anthropic' ? 'Anthropic：温度 ≤ 1，温度与 top_p 二选一；不支持惩罚、seed 或扩展思考。切换协议会清除不支持的字段。' : '';
+    clear.disabled = disabled || responses;
+    stop.disabled = disabled || responses || clear.checked;
+    protocolHint.textContent = currentProtocol === 'anthropic' ? 'Anthropic：温度 ≤ 1，温度与 top_p 二选一；不支持惩罚、seed 或扩展思考。切换协议会清除不支持的字段。'
+      : responses ? 'OpenAI Responses：固定发送 max_output_tokens；不支持惩罚、seed 或 stop（必须为 null）。切换协议会清除这些字段。' : '';
     error.textContent = generationError(current, currentProtocol);
   }
   refresh();
@@ -80,6 +89,9 @@ export function generationEditor({ value, prefix, disabled = false, protocol, mo
       currentProtocol = next;
       current = generationForProtocol(current, next);
       for (const [key, input] of controls) input.value = current[key] ?? '';
+      // Keep the stop controls consistent with the cleared value; only an explicit change does this.
+      stop.value = current.stop?.join('\n') ?? '';
+      clear.checked = Array.isArray(current.stop) && current.stop.length === 0;
       refresh(); onChange({ ...current });
     },
   };

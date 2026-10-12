@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import fixtures from '../src/generated/fixtures.json' with { type: 'json' };
 import { assertContract } from '../src/protocol.js';
+import { autoModelId } from '../src/model-id.js';
 
 // Deterministic route fixtures only. No real provider, credential, or network discovery is used.
 const backend = process.env.MOONFOX_TEST_BACKEND;
@@ -13,7 +14,7 @@ const modelSettings = (extra = {}) => ({ provider_id: 'primary', name: '托管�
 const manager = (page) => page.getByRole('dialog', { name: '提供商与模型', exact: true });
 const action = (root, name) => root.getByRole('button', { name, exact: true });
 
-async function mockManagement(page, { zeroSessions = true, admin = true, storage = 'dpapi', providers = [], models = [] } = {}) {
+async function mockManagement(page, { zeroSessions = true, admin = true, storage = 'dpapi', providers = [], models = [], testModels = [{ id: 'remote-safe', name: '<img src=x onerror=alert(1)>' }] } = {}) {
   const state = { providers: structuredClone(providers), models: structuredClone(models), storage, defaultId: 'demo', revision: 6, calls: [], failure: null, beforePut: null };
   const config = () => ({ revision: state.revision, settings: { defaults: { ...fixtures.snapshot.settings, model_id: state.defaultId } },
     models: [{ id: 'demo', label: 'Demo · 离线演示', provider: 'demo' }, ...state.models.filter(item => item.available).map(item => ({ id: item.id, label: item.settings.name, provider: item.settings.provider_id }))], tools: ['echo'], extensions: [] });
@@ -38,22 +39,24 @@ async function mockManagement(page, { zeroSessions = true, admin = true, storage
     updateAvailability();
     if (method === 'GET' && path === '/providers') return reply({ providers: state.providers, secret_storage: storage }, 'ProviderCatalog');
     if (method === 'GET' && path === '/models') return reply({ models: state.models, builtin_models: [{ id: 'demo', label: 'Demo · 离线演示', provider: 'demo' }], default_model_id: state.defaultId, config_revision: state.revision }, 'ModelCatalog');
-    const [, kind, id, operation] = path.split('/');
+    const [, kind, encodedId, operation] = path.split('/');
+    const automatic = path === '/models' && method === 'POST';
     const body = request.postDataJSON();
     state.calls.push({ path, method, body });
-    assertContract(method === 'PUT' ? kind === 'providers' ? 'PutProvider' : 'PutModel' : operation === 'default' ? 'SetDefaultModel' : 'RevisionCommand', body);
-    if (method === 'PUT' && state.beforePut) await state.beforePut();
+    assertContract(method === 'PUT' || automatic ? kind === 'providers' ? 'PutProvider' : 'PutModel' : operation === 'default' ? 'SetDefaultModel' : 'RevisionCommand', body);
+    if ((method === 'PUT' || automatic) && state.beforePut) await state.beforePut();
     if (state.failure) { const failure = state.failure; state.failure = null; return reply({ error: 'test-only', detail: failure.detail }, null, failure.status); }
+    const id = automatic ? autoModelId({ name: body.settings.name, providerId: body.settings.provider_id, occupied: ['demo', ...state.models.map(item => item.id)] }) : decodeURIComponent(encodedId ?? '');
     const list = state[kind]; const existing = list.find(item => item.id === id);
     if (body.expected_revision !== (operation === 'default' ? state.revision : existing?.revision ?? 0)) return reply({ error: 'conflict', detail: 'fixture revision' }, null, 409);
-    if (method === 'PUT') {
+    if (method === 'PUT' || automatic) {
       const saved = { id, revision: (existing?.revision ?? 0) + 1, settings: structuredClone(body.settings) };
       if (kind === 'providers') Object.assign(saved, { key_configured: body.secret_action === 'replace' ? true : body.secret_action === 'clear' ? false : existing?.key_configured ?? false, credential_source: body.settings.auth_mode === 'env' ? 'environment' : body.settings.auth_mode === 'none' ? 'none' : 'stored' });
       else Object.assign(saved, { available: true, unavailable_reason: null });
       if (existing) list.splice(list.indexOf(existing), 1, saved); else list.push(saved);
       state.revision++; updateAvailability(); return reply(saved, kind === 'providers' ? 'ProviderView' : 'ManagedModelView');
     }
-    if (operation === 'test') return reply({ ok: true, status: 'ok', detail: 'ignored untrusted detail', latency_ms: 17, models: [{ id: 'remote-safe', name: '<img src=x onerror=alert(1)>' }] }, 'ProviderTestResult');
+    if (operation === 'test') return reply({ ok: true, status: 'ok', detail: 'ignored untrusted detail', latency_ms: 17, models: testModels }, 'ProviderTestResult');
     if (operation === 'default') { state.defaultId = id; state.revision++; return reply(config(), 'ConfigView'); }
     if (operation === 'delete') {
       if (kind === 'providers' && state.models.some(model => model.settings.provider_id === id)) return reply({ error: 'conflict', detail: 'referenced' }, null, 409);
@@ -292,4 +295,135 @@ test('catalog refresh preserves unsaved session generation and stale current mod
   expect(body.settings.max_turns_per_run).toBe(3);
   expect(body.settings.max_tokens_per_input).toBe(fixtures.snapshot.settings.max_tokens_per_input);
   expect(state.calls.filter(call => call.path.endsWith('/test'))).toHaveLength(0);
+});
+
+test('Responses protocol uses OpenAI base URL and clears unsupported fields only on explicit switching', async ({ page }) => {
+  const errors = []; page.on('pageerror', error => errors.push(error.message));
+  const state = await mockManagement(page, { providers: [provider('primary', { auth_mode: 'none' })] });
+  await login(page); await open(page); await fillProvider(page, 'responses');
+  const input = label => manager(page).getByLabel(label, { exact: true });
+  await input('协议').selectOption('openai-responses');
+  await expect(input('API 基础地址')).toHaveAttribute('placeholder', 'https://api.openai.com/v1');
+  await input('认证方式').selectOption('none');
+  await input('API 基础地址').fill('https://provider.invalid/v1/responses');
+  await action(manager(page), '保存提供商').click();
+  await expect(manager(page).getByRole('alert')).toContainText('API 基础地址');
+  expect(state.calls).toHaveLength(0);
+  await input('API 基础地址').fill('https://provider.invalid/v1');
+  await action(manager(page), '保存提供商').click();
+  await expect(manager(page).locator('[data-provider-id="responses"]')).toContainText('OpenAI · Responses');
+  expect(state.calls[0].body.settings.protocol).toBe('openai-responses');
+  await manager(page).getByRole('tab', { name: '模型', exact: true }).click();
+  await action(manager(page), '新建模型').click();
+  await input('模型名称').fill('gpt-4.1'); await input('远端模型 ID').fill('gpt-4.1');
+  await input('随机种子 · seed').fill('7');
+  await input('频率惩罚 · frequency_penalty').fill('0.5');
+  await input('明确清空停止词（发送 []）').check();
+  await input('OpenAI 输出 token 字段').selectOption('max_completion_tokens');
+  await input('所属提供商').selectOption('responses');
+  for (const label of ['随机种子 · seed', '频率惩罚 · frequency_penalty', '存在惩罚 · presence_penalty', '停止词 · stop']) {
+    await expect(input(label)).toBeDisabled(); await expect(input(label)).toHaveValue('');
+  }
+  await expect(input('明确清空停止词（发送 []）')).toBeDisabled();
+  await expect(input('明确清空停止词（发送 []）')).not.toBeChecked();
+  await expect(input('OpenAI 输出 token 字段')).toBeDisabled();
+  await expect(manager(page)).toContainText('固定映射为 max_output_tokens');
+  await expect(input('支持思考级别（仅 OpenAI）')).toBeEnabled();
+  await input('支持思考级别（仅 OpenAI）').check();
+  await input('温度 · temperature').fill('0.4');
+  await input('单次输出上限 · max_tokens').fill('256');
+  await expect(input('模型 ID')).toHaveValue('gpt-4.1');
+  expect(await input('模型 ID').getAttribute('pattern')).toBeNull();
+  expect(await input('模型 ID').evaluate(node => node.checkValidity())).toBe(true);
+  await action(manager(page), '保存模型').click();
+  await expect(manager(page).locator('[data-model-id="gpt-4.1"]')).toBeVisible();
+  expect(state.calls.at(-1)).toMatchObject({ method: 'POST', path: '/models', body: { expected_revision: 0, settings: { supports_reasoning: true, token_field: 'max_tokens' } } });
+  expect(state.calls.at(-1).body.settings.parameters).toEqual({ ...defaults(), temperature: 0.4, max_tokens: 256 });
+  expect(state.calls.some(call => call.path.endsWith('/test'))).toBe(false);
+  expect(errors).toEqual([]);
+});
+
+test('model name defaults, discovery, provider collisions and stale-catalog fallback use automatic POST', async ({ page }) => {
+  const existing = { id: 'gpt-4.1', revision: 1, settings: modelSettings({ name: 'gpt-4.1' }), available: true, unavailable_reason: null };
+  const state = await mockManagement(page, {
+    providers: [provider('primary'), provider('secondary')], models: [existing],
+    testModels: [{ id: 'gpt-4.1', name: 'gpt-4.1' }],
+  });
+  await login(page); await open(page);
+  const primary = manager(page).locator('[data-provider-id="primary"]');
+  await action(primary, '检测 / 获取模型').click(); await action(primary, '添加模型').click();
+  const input = label => manager(page).getByLabel(label, { exact: true });
+  await expect(input('模型名称')).toHaveValue('gpt-4.1');
+  await expect(input('远端模型 ID')).toHaveValue('gpt-4.1');
+  await expect(input('模型 ID')).toHaveValue('primary-gpt-4.1');
+  await input('所属提供商').selectOption('secondary');
+  await expect(input('模型 ID')).toHaveValue('secondary-gpt-4.1');
+  await input('模型名称').fill('demo'); await expect(input('模型 ID')).toHaveValue('secondary-demo');
+  await input('模型名称').fill('GPT-4.1'); await expect(input('模型 ID')).toHaveValue('GPT-4.1');
+  await input('模型名称').fill('gpt-4.1');
+  await action(manager(page), '保存模型').click();
+  await expect(manager(page).locator('[data-model-id="secondary-gpt-4.1"]')).toBeVisible();
+  expect(state.calls.at(-1)).toMatchObject({ method: 'POST', path: '/models' });
+  await action(manager(page), '新建模型').click();
+  await input('所属提供商').selectOption('secondary');
+  await input('模型名称').fill('gpt-4.1'); await input('远端模型 ID').fill('gpt-4.1');
+  await expect(input('模型 ID')).toHaveValue('secondary-gpt-4.1-2');
+  await input('模型 ID').fill('Custom-GPT.4.1');
+  await input('模型名称').fill('changed name'); await expect(input('模型 ID')).toHaveValue('Custom-GPT.4.1');
+  await input('模型 ID').fill(''); await expect(input('模型 ID')).toHaveValue('changed-name');
+  await input('模型名称').fill('gpt-4.1');
+  await expect(input('模型 ID')).toHaveValue('secondary-gpt-4.1-2');
+  // Another client creates the previewed ID after this browser has read its catalog.
+  state.models.push({ ...structuredClone(existing), id: 'secondary-gpt-4.1-2', settings: modelSettings({ provider_id: 'secondary', name: 'gpt-4.1' }) });
+  await action(manager(page), '保存模型').click();
+  await expect(manager(page).locator('[data-model-id="secondary-gpt-4.1-3"]')).toBeVisible();
+  expect(state.calls.at(-1)).toMatchObject({ method: 'POST', path: '/models', body: { expected_revision: 0, settings: { name: 'gpt-4.1' } } });
+  expect(state.calls.at(-1).body).not.toHaveProperty('id');
+});
+
+test('manual dotted Unicode IDs remain stable and Responses legacy values require explicit repair', async ({ page }) => {
+  const state = await mockManagement(page, {
+    providers: [provider('primary', { protocol: 'openai-responses' }), provider('secondary')],
+    models: [
+      { id: 'legacy-GPT.4.1', revision: 1, settings: modelSettings({ token_field: 'max_completion_tokens', supports_reasoning: true }), available: true, unavailable_reason: null },
+      { id: 'needs-repair', revision: 1, settings: modelSettings({ supports_reasoning: true, token_field: 'max_completion_tokens', parameters: { ...defaults(), temperature: 0.2, seed: 7, stop: [] } }), available: false, unavailable_reason: 'incompatible' },
+    ],
+  });
+  await login(page); await open(page);
+  await manager(page).getByRole('tab', { name: '模型', exact: true }).click();
+  await action(manager(page), '新建模型').click();
+  const input = label => manager(page).getByLabel(label, { exact: true });
+  await input('模型名称').fill('手工模型'); await input('远端模型 ID').fill('remote-4.1');
+  await input('模型 ID').fill('bad/name');
+  expect(await input('模型 ID').evaluate(node => node.checkValidity())).toBe(false);
+  await input('模型 ID').fill('手工-GPT-4.1');
+  expect(await input('模型 ID').evaluate(node => node.checkValidity())).toBe(true);
+  await action(manager(page), '保存模型').click();
+  const manual = manager(page).locator('[data-model-id="手工-GPT-4.1"]');
+  await expect(manual).toBeVisible();
+  expect(state.calls.at(-1)).toMatchObject({ method: 'PUT', path: `/models/${encodeURIComponent('手工-GPT-4.1')}` });
+  await action(manual, '编辑').click();
+  await expect(input('模型 ID')).toHaveAttribute('readonly', '');
+  await input('模型名称').fill('新显示名'); await input('所属提供商').selectOption('secondary');
+  await expect(input('模型 ID')).toHaveValue('手工-GPT-4.1');
+  await action(manager(page), '保存模型').click(); await expect(manual).toContainText('新显示名');
+  expect(state.calls.at(-1)).toMatchObject({ method: 'PUT', path: `/models/${encodeURIComponent('手工-GPT-4.1')}`, body: { expected_revision: 1 } });
+  const legacy = manager(page).locator('[data-model-id="legacy-GPT.4.1"]');
+  await action(legacy, '编辑').click();
+  await expect(input('OpenAI 输出 token 字段')).toHaveValue('max_completion_tokens');
+  await expect(input('OpenAI 输出 token 字段')).toBeDisabled();
+  await input('模型名称').fill('保留旧 Chat 字段');
+  await action(manager(page), '保存模型').click(); await expect(legacy).toContainText('保留旧 Chat 字段');
+  expect(state.calls.at(-1).body.settings.token_field).toBe('max_completion_tokens');
+  const repair = manager(page).locator('[data-model-id="needs-repair"]');
+  await action(repair, '编辑').click();
+  await expect(manager(page)).toContainText('当前保存值包含 OpenAI Responses 不支持的字段');
+  await expect(input('随机种子 · seed')).toHaveValue('7');
+  await expect(input('明确清空停止词（发送 []）')).toBeChecked();
+  await action(manager(page), '清除不支持的字段').click();
+  await expect(input('随机种子 · seed')).toHaveValue('');
+  await expect(input('明确清空停止词（发送 []）')).not.toBeChecked();
+  await expect(input('支持思考级别（仅 OpenAI）')).toBeChecked();
+  await action(manager(page), '保存模型').click(); await expect(repair).toBeVisible();
+  expect(state.calls.at(-1).body.settings.parameters).toEqual({ ...defaults(), temperature: 0.2 });
 });
