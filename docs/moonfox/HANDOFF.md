@@ -2,13 +2,13 @@
 
 > **用途**：当前实施交接文档，保留设计决策并记录已验证的阶段进展。新会话从本页继续，无需回溯历史对话。
 >
-> **当前状态**：**阶段 A–D、提供商基础管理及 Responses/模型 ID 补充已实现并验收**。三种协议、多提供商/模型/只写凭据/生成参数通过应用共享目录持久化，WebUI、headless 与后续 QQ 共用；E/F 尚未开始。
+> **当前状态**：**阶段 A–D、提供商基础管理、Responses/模型 ID 及 9router 兼容修复已实现并验收**。三种协议、多提供商/模型/只写凭据/生成参数通过应用共享目录持久化，WebUI、headless 与后续 QQ 共用；E/F 尚未开始。
 
 ---
 
 ## 0. 一句话状态
 
-阶段 C `012211b`、D `15b5694`、管理基线 `4c0d69b` 已先推送并核对远程。本轮在其上增加真正的 OpenAI Responses 适配，以及独立模型 ID 校验、名称默认 ID 和服务端查重；Agent 核心保持不变。启动见 [STAGE-D.md](STAGE-D.md)，具体管理契约见 [PROVIDER-MANAGEMENT.md](PROVIDER-MANAGEMENT.md)。
+阶段 C `012211b`、D `15b5694`、管理基线 `4c0d69b`、Responses/ID `e04266f` 和会话路由修正 `b26ed27` 已推送。本轮修复真实 9router 流的空字段及缺省模型元数据兼容性，已验证 DeepSeek 的 Chat Completions / Responses 短文本调用与真实 WebUI；Agent 核心保持不变。启动见 [STAGE-D.md](STAGE-D.md)，管理及兼容性契约见 [PROVIDER-MANAGEMENT.md](PROVIDER-MANAGEMENT.md)。
 
 ### 当前代码边界
 
@@ -22,11 +22,11 @@
 
 - `python scripts/check.py --installation --web`：Ruff、格式、strict mypy、Python 单元/架构/独立安装、协议导出一致性和前端测试/构建。浏览器另外执行 `npm.cmd --prefix packages/web-ui run test:browser`。
 - 阶段 B 最终实测：完整验收 **209 passed**；Agent 专项 **126 passed**；mypy strict 检查 **19** 个源码文件；coverage 启用分支统计的总覆盖率 **97%**（非 100% 分支覆盖）。
-- 阶段 C 基线 448 passed、D 基线 576 passed、管理基线 804 passed；当前 Responses/ID 补充 **947 passed**（含安装）、strict mypy **88** 个源码文件，Ruff 格式 **131** 文件；前端 **58** 单元测试、构建与 **14/14** Edge 浏览器测试通过。
+- 阶段 C 基线 448 passed、D 基线 576 passed、管理基线 804 passed、Responses/ID 947 passed、会话路由修正 950 passed；当前 9router 兼容修复 **991 passed**（含安装）、strict mypy **88** 个源码文件，Ruff 格式 **133** 文件；前端 **58** 单元测试、构建与 **14/14** Edge 浏览器测试通过。
 - 安装验收三个包 sdist → wheel，五个干净环境：AI 单包、Agent、headless app、依次目录安装、server/providers extras。普通核心/headless 不安装 Web 框架、httpx 或前端产物。
 - 六个示例复制到仓库外用 `python -I`：core_only/core_stage_b、headless_app/minimal_extension、application_service/server_smoke。后两者验证 durable 接收/完成分离和 API-only 安装。
 - 实测 Windows / Python 3.14.8；声明最低 Python 3.12，但本机没有对 3.12 单独执行测试。开发工具安装在本会话 scratch 虚拟环境，不改全局 Python。
-- Git 分支 `main`，公开仓库 `https://github.com/FYHC1/moonfox-agent`；阶段 A `a92898f`、B `cb9ce06`、C `012211b`、D `15b5694`、管理基线 `4c0d69b` 已推送；Responses/ID 补充由本轮提交记录，最新哈希/推送状态以 Git 为准。使用仓库局部 noreply 身份与 GitHub CLI 凭据，不把 token 写入项目。
+- Git 分支 `main`，公开仓库 `https://github.com/FYHC1/moonfox-agent`；阶段 A `a92898f`、B `cb9ce06`、C `012211b`、D `15b5694`、管理基线 `4c0d69b`、Responses/ID `e04266f`、会话路由修正 `b26ed27` 已推送；9router 兼容修复的最新哈希/推送状态以 Git 为准。使用仓库局部 noreply 身份与 GitHub CLI 凭据，不把 token 写入项目。
 - **阶段交付规则（用户确认）**：每完成一个阶段，先完成相关验收，提交并推送 GitHub、核对本地/远程哈希一致，再开始下一阶段。阶段 C 推送必须先于阶段 D 实现。
 
 实现修正参考伪代码：取消信号以 AI 层协议表示，避免反向依赖；流不是广播，溢出明确失败且最终结果可等待；未终止流确定性报错；快照采用深拷贝；未知自定义消息要求显式 codec，编程错误不冒充模型失败。
@@ -93,6 +93,17 @@
 - 修复 reply 订阅初始化失败后监听器残留、无法重试的问题：路由解析全部成功后才发布监听器与内存路由映射。
 - 新增 3 项回归测试，均先验证旧代码失败再修复转绿；相关会话/渠道测试 **20 passed**。完整 `scripts/check.py --installation --web`：**950 Python tests**、strict mypy **88** 文件、Ruff/格式 **132** 文件、**58 JS tests** 和生产构建通过；Edge 浏览器回归 **14/14** 通过。
 - 本轮直接审查共享配置、会话生命周期、渠道与 WebUI 衔接；并行协议适配辅助复核因耗时停止，未返回结论，不计入完成的审查。无真实厂商调用；未重启/修改演示服务或用户配置。现有 Starlette/httpx 弃用警告仍保留。
+
+### 9router 实测兼容性修复
+
+- 真实调用定位：Chat 流使用空字符串 finish_reason/refusal，结束块可能带空旧式 function_call；Responses 的 response.created/in_progress/completed 不含 model。修复仅位于 AI 协议边界，不按厂商品牌分叉。
+- 仅忽略空占位与缺省模型元数据，响应 ID/实际模型名称一致性、明确终态、工具完整性校验保留；response_model 未知时为 None，不伪造远端解析结果。无自动重试或业务降级。
+- 新增 **41** 项合成回归：旧代码 **14 failed / 27 passed**，修复后新测试及已有远端/Responses/应用 HTTP 集成 **342 passed**。不把真实模型的自由回复内容当作确定性协议断言。
+- 完整 `scripts/check.py --installation --web`：**991 Python tests**（含三包构建、五环境安装）、strict mypy **88** 文件、Ruff/格式 **133** 文件、**58 JS tests**、协议导出一致性与生产构建通过；Edge 浏览器回归 **14/14** 通过。保留原 Starlette/httpx 上游弃用警告；未重新计算覆盖率。
+- 已用用户配置的 9router / `cbai/deepseek-v4.1-flash` 实测两种协议的短文本流、用量与关闭；WebUI 实测普通问答（17+25 → 42）、增量与持久回复一致、刷新恢复、390px 无横向溢出、页面错误 0、浏览器存储为空。图片/思考/真实工具未进行厂商 API 验收。
+- 真实 Edge 管理验证：Responses 保存，含 `-`/`.` 的自动/手工 ID、同名提供商前缀、编辑名称不改 ID。临时提供商/模型均已删除；用户原提供商、凭据、模型 ID、默认模型与现有会话保持不变。
+- 8765 原进程未加载此前 Responses/ID 更新，已在空闲时备份 SQLite/JSONL 并以同一 home/令牌重启，检查最新协议加载与目录恢复。内置浏览器面板仍不可用，使用本机 Edge/Playwright；不影响用户访问 `http://127.0.0.1:8765/`。
+- **数据位置提醒**：用户本次真实配置仍在本 PI 会话 scratch 的 `interactive-preview-home`，不是固定正式目录；备份与测试产物也仅在 scratch。删除本 PI 会话前应迁移到固定私有 `--home`，本轮未擅自迁移。只保留带“修复验证/实测”标题的新增验证对话，未改写原聊天记录。
 
 ### 下一步：阶段 E
 

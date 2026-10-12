@@ -241,7 +241,15 @@ class OpenAIProvider(RemoteProvider):
             delta = wire_object(choice.get("delta"))
             if delta.get("role") not in (None, "assistant"):
                 raise InvalidResponse()
-            if any(delta.get(key) is not None for key in ("function_call", "audio", "refusal")):
+            # Gateways may serialize empty optional fields rather than omitting them.
+            # Ignore only empty legacy placeholders; real legacy calls remain unsupported.
+            if delta.get("function_call") is not None:
+                legacy = wire_object(delta["function_call"])
+                if set(legacy) - {"name", "arguments"} or any(
+                    value not in (None, "") for value in legacy.values()
+                ):
+                    raise InvalidResponse()
+            if delta.get("audio") is not None or delta.get("refusal") not in (None, ""):
                 raise InvalidResponse()
             if delta.get("content") is not None:
                 text = wire_string(delta["content"])
@@ -282,7 +290,7 @@ class OpenAIProvider(RemoteProvider):
                             live.arguments.append(arguments)
                             state.tool_delta(live.content_index, arguments)
             finish = choice.get("finish_reason")
-            if finish is not None:
+            if finish not in (None, ""):  # Some gateways use "" for an unfinished choice.
                 if finish not in ("stop", "length", "tool_calls"):
                     raise InvalidResponse()
                 if (finish == "tool_calls") != bool(calls):

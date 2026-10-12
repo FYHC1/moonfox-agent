@@ -83,6 +83,10 @@ class _ResponseState:
 
     def identity(self, raw: dict[str, Any]) -> None:
         for key, attr in (("id", "response_id"), ("model", "response_model")):
+            # Compatible gateways can omit resolved-model metadata, even at completion.
+            # Keep the requested model separately; never invent a resolved model name.
+            if key == "model" and raw.get(key) is None:
+                continue
             value = wire_string(raw.get(key), nonempty=True)
             previous = getattr(self.state.message, attr)
             if previous is not None and value != previous:
