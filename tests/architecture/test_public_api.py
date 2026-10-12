@@ -5,12 +5,21 @@ import sys
 import pytest
 
 
-@pytest.mark.parametrize("package", ["moonfox_ai", "moonfox_agent"])
-def test_public_import_has_no_startup_side_effects(package, tmp_path):
+@pytest.mark.parametrize(
+    "module",
+    [
+        "moonfox_ai.api",
+        "moonfox_agent.api",
+        "moonfox_app.api",
+        "moonfox_app.extension_api",
+    ],
+)
+def test_public_import_has_no_startup_side_effects(module, tmp_path):
     code = f"""
 import asyncio
 import importlib
 import threading
+import sys
 from unittest.mock import patch
 async def check():
     before_tasks = asyncio.all_tasks()
@@ -21,11 +30,16 @@ async def check():
         patch('threading.Thread.start', side_effect=AssertionError('thread on import')),
         patch('asyncio.create_task', side_effect=AssertionError('task on import')),
     ):
-        api = importlib.import_module('{package}.api')
+        api = importlib.import_module('{module}')
     assert len(api.__all__) == len(set(api.__all__))
     assert all(hasattr(api, name) for name in api.__all__)
     assert asyncio.all_tasks() == before_tasks
     assert threading.enumerate() == before_threads
+    assert not any(name.startswith(('fastapi', 'uvicorn', 'moonfox_ext_')) for name in sys.modules)
+    if '{module}' == 'moonfox_app.extension_api':
+        assert not any(name.startswith(('moonfox_app.bootstrap', 'moonfox_app.runtime',
+                                       'moonfox_app.extensions', 'moonfox_app.server'))
+                       for name in sys.modules)
 asyncio.run(check())
 """
     env = os.environ.copy()

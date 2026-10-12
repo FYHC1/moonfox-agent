@@ -2,13 +2,13 @@
 
 > **用途**：当前实施交接文档，保留设计决策并记录已验证的阶段进展。新会话从本页继续，无需回溯历史对话。
 >
-> **当前状态**：**阶段 A/B 已实现并通过验收**。独立核心、faux provider、双队列调度、请求/工具/turn 钩子、并行/嵌套工具、取消与预算已就绪；下一步是阶段 C 的 headless 应用运行时与扩展 SDK。
+> **当前状态**：**阶段 A/B/C 已实现并通过独立安装验收**。独立核心、Agent 机制、持久会话运行时、扩展 SDK/管理器与 headless 装配已就绪；下一步是阶段 D 的应用服务与 Web 协议。
 
 ---
 
 ## 0. 一句话状态
 
-两包独立核心已实现；阶段 A 基线先上传 GitHub，再完成阶段 B。安装与检查命令见根 [README](../../README.md)，核心 API 行为见 [Agent 包说明](../../packages/agent/README.md)。
+阶段 A/B 的两个独立核心包已上传 GitHub；阶段 C 新增 moonfox-app（runtime/extension_api/extensions/bootstrap），不修改核心源码。安装与检查命令见根 [README](../../README.md)，应用 API 见 [应用包说明](../../packages/moonfox-app/README.md)。
 
 ### 当前代码边界
 
@@ -16,16 +16,18 @@
 - `moonfox_agent.api`：steering/follow-up 双队列（one_at_a_time/all）、完整请求/工具/turn 钩子、并行/串行工具、受检嵌套调用、事件、取消和显式运行预算；项目内仅依赖 ai。
 - `continue_`、`reset`、状态替换/模型/工具设置均提供公开入口；运行中修改规范状态被拒绝，取消须等待 idle。
 - 默认工具执行改为 parallel；任一工具 sequential 覆盖使整批串行。阶段 A 四参数 execute 保持兼容，嵌套调用使用新增 execute_with_context 与 ctx.execute_tool。
-- 尚未创建应用包、WebUI、具体扩展或真实 provider。
+- `moonfox_app.api`：headless 工厂/门面、AgentSession、entries/投影/草稿预览、JSONL/in-memory store、可注入压缩；`moonfox_app.extension_api` 提供轻量 SDK。尚无业务服务/server/WebUI/真实 provider/具体人设、记忆或 QQ 扩展。
 
 ### 已验证与复现
 
-- `python scripts/check.py --installation`：Ruff、格式检查、mypy strict、确定性单元/架构测试及安装验收均通过。阶段 B 新增队列、钩子、并行/嵌套、错误和资源收尾负例；覆盖率用 coverage 的 branch 模式实测，不宣称 100%。
+- `python scripts/check.py --installation`：Ruff、格式检查、mypy strict、确定性单元/架构测试及安装验收均通过。阶段 C 新增事务恢复、投影/压缩、headless 生命周期、扩展注册/派发/授权/任务收尾负例。
 - 阶段 B 最终实测：完整验收 **209 passed**；Agent 专项 **126 passed**；mypy strict 检查 **19** 个源码文件；coverage 启用分支统计的总覆盖率 **97%**（非 100% 分支覆盖）。
-- 安装验收分别构建 sdist → wheel，验证 AI 单包、Agent wheel 自动解析 AI 依赖、依次本地目录安装三个干净环境；均不安装宿主/扩展/Web 框架。
-- 两个示例复制到仓库外，用 `python -I` 执行：core_only 验证工具续轮；core_stage_b 验证受检嵌套调用、follow-up、到限停止与显式继续。
+- 阶段 C 验证新增应用 wheel，保持原核心两个 wheel 不安装应用；最终测试/覆盖率记录见下方「阶段 C」小节。mypy strict 当前检查 **48** 个源码文件。
+- 安装验收分别构建三个包 sdist → wheel，在四个干净环境验证 AI 单包、Agent wheel、应用 wheel、依次本地目录安装；headless 不安装 Web 框架或具体业务扩展。
+- 四个示例复制到仓库外，使用 `python -I`：core_only/core_stage_b 验证独立核心；headless_app 验证保存恢复；minimal_extension 验证首轮注入与卸载清理。
 - 实测 Windows / Python 3.14.8；声明最低 Python 3.12，但本机没有对 3.12 单独执行测试。开发工具安装在本会话 scratch 虚拟环境，不改全局 Python。
-- Git 分支 `main`，公开仓库 `https://github.com/FYHC1/moonfox-agent`；阶段 A 基线提交 `a92898f` 已推送并验证远程哈希一致。Git 身份仅配置本仓库，使用 GitHub noreply 邮箱。
+- Git 分支 `main`，公开仓库 `https://github.com/FYHC1/moonfox-agent`；阶段 A `a92898f`、阶段 B `cb9ce06` 已推送。阶段 C 交付由本阶段提交记录；最新提交/推送状态以 Git 为准。身份仅配置本仓库，使用 GitHub noreply 邮箱。
+- **阶段交付规则（用户确认）**：每完成一个阶段，先完成相关验收，提交并推送 GitHub、核对本地/远程哈希一致，再开始下一阶段。阶段 C 推送必须先于阶段 D 实现。
 
 实现修正参考伪代码：取消信号以 AI 层协议表示，避免反向依赖；流不是广播，溢出明确失败且最终结果可等待；未终止流确定性报错；快照采用深拷贝；未知自定义消息要求显式 codec，编程错误不冒充模型失败。
 
@@ -38,11 +40,25 @@
 - 单向取消收敛已启动工具/嵌套/更新/监听器后才 idle；外部 task 取消收尾后重抛。监听器或编程错误先补齐可配对结果再传播；非法 provider 工具 ID 保存诊断并拒绝执行。
 - 核心不是插件宿主或沙箱；不实现通知隔离/业务重试/跨 run 成本网关。任意未注册后台任务与阻塞同步工具由调用方负责。
 
-### 下一步：阶段 C
+### 阶段 C 的实现与验收
 
-创建 packages/moonfox-app 的 runtime（entries/projection/storage/session/prompt/compaction）、轻量 extension_api、扩展注册/派发/生命周期与 headless 装配。继续保持 runtime 不反向 import services/server/具体扩展；无 server、前端或业务扩展也能保存恢复会话。本轮未创建这些模块。
+- runtime 仅依赖核心公开 API、轻量 SDK 和注入端口，不 import extensions/services/config/security/jobs/server 的具体实现；SDK 导入不载入 runtime/bootstrap/扩展宿主，不创建任务/线程/进程/网络连接。
+- entry 具有 id/parent_id；消息 entry 沿用 Agent message_id。模型/thinking 变更、context edit、compaction、namespaced custom 均追加为事实；投影和持久 leaf 可重建分支，原 entry 不删除。
+- JSONL 使用 begin/entry/commit + SHA-256、修订号 CAS、成功批 flush/fsync 和 OS 单写者锁。损坏/未提交尾部截断到安全边界；中部损坏/重复 ID/孤儿 parent 报错。不是网络分布式存储，也不承诺硬件故障绝对零丢失。
+- `SessionBinding(session_id, scope_id)` 是不可变 opaque 绑定，恢复须完全匹配；身份认证/domain 路由在 D/E 阶段补齐，当前不宣称实现 QQ/Agent 记忆隔离验收。
+- 缺失尾部工具结果恢复为 unknown 错误，不自动重放；未知 custom 数据保留，关键上下文缺 codec 明确报不兼容。持久化为严格有限 JSON，未知 role/type/字段不得静默丢弃。
+- 首轮/每次请求从规范投影重建 prompt/context。section 增删版本化提交；参考块有来源、受 token 估算预算约束，不污染 transcript，不复用失败检索结果。卸载移除工具与 section。
+- 可注入压缩策略；支持手动和显式阈值（每 run 次数/超时上限）。切点不拆工具配对，系统/工具基线保留，新摘要可纠正旧事实。非法/取消/无效压缩不提交，不自动 retry/reenter/reset 预算。
+- 扩展显式工厂/启用列表/授权能力；manifest SDK/版本/依赖校验。会话/宿主生命周期分开，部分失败回滚、注销句柄撤销、受管后台任务收敛。宿主 ChannelGateway 仅协议和注入测试，不实现 QQ 路由。
+- 工具默认拒绝；宿主 checker 使用校验后的真实参数且先于扩展限制，嵌套工具相同检查。boundary 草稿预览后原子提交；不能用预览期间另行 stage/enqueue 绕过事务，continue 仍用同次预算。
+- `create_headless_app` 显式拥有 store 与扩展生命周期；无扩展也能保存恢复。关闭/外部 task 取消等待工具与通知收尾；未消费 steering/follow-up 仍是进程内队列，不冒充 durable inbox。
+- 最终实测：完整 `check.py --installation` **448 passed**；应用专项 **221 passed**；mypy strict **48** 个源码文件；Ruff 格式检查 **76** 个文件。coverage 开启 branch 后，应用总覆盖率 **93%**（不是 93% 分支覆盖）。核心源码和参考 Markdown 本轮未改动。
 
-文档维护说明：本轮 Ruff 曾误格式化 Markdown 代码块；当前 HANDOFF/DESIGN 已精确恢复后仅更新状态，mini-pi 与历史草案的排版调整经用户确认保留。Ruff 已限定 Python 文件并排除 docs，后续不再格式化参考文档。
+### 下一步：阶段 D
+
+先读本页、ARCHITECTURE/DESIGN 与应用包 README。实现 services 的 SessionHub/单会话执行者/SessionFactory/路由/inbox-outbox、config/security/预算与统一计量端口，再建立 server 的版本化 HTTP/WS 协议和独立 web-ui。不要把业务规则放进 runtime/core 或用 UI 状态承担持久会话生命周期。人设/记忆/QQ 实现按 E/F 后续进行。
+
+文档维护：Ruff 只处理 Python 文件，排除 docs；原 mini-pi 和历史草案保持本轮前的内容。
 
 ---
 
@@ -115,7 +131,7 @@ SnowLuma ↔ QQ 宿主扩展 ↔ ChannelGateway / 应用服务
 
 ---
 
-## 4. 目录规划（ai/agent 与核心示例已创建，其余待后续阶段）
+## 4. 目录规划（ai/agent、阶段 C 应用模块与示例已创建，其余按路线推进）
 
 ```text
 moonfox-agent/

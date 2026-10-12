@@ -83,8 +83,24 @@ for name in ('moonfox_app', 'moonfox_ext_persona', 'moonfox_ext_memory', 'moonfo
 print(json.dumps(sorted(d.metadata['Name'].lower().replace('_', '-') for d in distributions())))
 """
 
+APP_SMOKE = """
+import importlib.util
+import json
+import sys
+from importlib.metadata import distributions
+from pathlib import Path
+import moonfox_app.api
+import moonfox_app.extension_api
+for module in (moonfox_app.api, moonfox_app.extension_api):
+    assert Path(module.__file__).resolve().is_relative_to(Path(sys.prefix).resolve())
+for name in ('moonfox_ext_persona', 'moonfox_ext_memory', 'moonfox_ext_qq',
+             'fastapi', 'uvicorn', 'websockets', 'httpx', 'aiosqlite'):
+    assert importlib.util.find_spec(name) is None, name
+print(json.dumps(sorted(d.metadata['Name'].lower().replace('_', '-') for d in distributions())))
+"""
 
-def test_core_wheels_and_source_installs_work_outside_workspace(tmp_path):
+
+def test_wheels_and_source_installs_work_outside_workspace(tmp_path):
     outside = tmp_path / "outside"
     outside.mkdir()
     artifacts = tmp_path / "artifacts"
@@ -99,7 +115,12 @@ def test_core_wheels_and_source_installs_work_outside_workspace(tmp_path):
     # when placed below pytest's long per-test directory on Windows.
 
     wheels = {}
-    for package, namespace in (("ai", "moonfox_ai"), ("agent", "moonfox_agent")):
+    distributions = (
+        ("ai", "moonfox_ai", "moonfox_ai"),
+        ("agent", "moonfox_agent", "moonfox_agent_core"),
+        ("moonfox-app", "moonfox_app", "moonfox_app"),
+    )
+    for package, namespace, distribution in distributions:
         # Separate sdist builds prove each package owns all its build inputs.
         run(
             [
@@ -115,7 +136,6 @@ def test_core_wheels_and_source_installs_work_outside_workspace(tmp_path):
             cwd=outside,
             env=env,
         )
-        distribution = "moonfox_ai" if package == "ai" else "moonfox_agent_core"
         archive = next(artifacts.glob(f"{distribution}-*.tar.gz"))
         extracted = tmp_path / f"source-{package}"
         extracted.mkdir()
@@ -147,9 +167,16 @@ def test_core_wheels_and_source_installs_work_outside_workspace(tmp_path):
             requirements = metadata.get_all("Requires-Dist", [])
             if package == "ai":
                 assert requirements == []
-            else:
+            elif package == "agent":
                 assert sorted(req.split("<")[0].split("=")[0] for req in requirements) == [
                     "moonfox-ai",
+                    "pydantic",
+                ]
+            else:
+                assert sorted(req.split("<")[0].split("=")[0] for req in requirements) == [
+                    "moonfox-agent-core",
+                    "moonfox-ai",
+                    "packaging",
                     "pydantic",
                 ]
 
@@ -165,7 +192,7 @@ def test_core_wheels_and_source_installs_work_outside_workspace(tmp_path):
             artifacts,
             "--find-links",
             artifacts,
-            wheels["agent"],
+            wheels["moonfox-app"],
             "hatchling>=1.26,<2",
         ],
         cwd=outside,
@@ -220,3 +247,29 @@ def test_core_wheels_and_source_installs_work_outside_workspace(tmp_path):
     assert "requests=2" in run([source_python, "-I", example], cwd=outside, env=env)
     assert "requests=3" in run([source_python, "-I", advanced], cwd=outside, env=env)
     run([source_python, "-I", "-m", "pip", "check"], cwd=outside, env=env)
+
+    app_python = make_environment(tmp_path / "headless-app")
+    run([app_python, "-I", "-m", "pip", "install", wheels["moonfox-app"]], cwd=outside, env=env)
+    expected_app = expected_runtime | {"moonfox-app", "packaging"}
+    installed = json.loads(run([app_python, "-I", "-c", APP_SMOKE], cwd=outside, env=env))
+    assert set(installed) == expected_app
+    headless = outside / "headless_app.py"
+    shutil.copy2(ROOT / "examples" / "headless_app.py", headless)
+    minimal = outside / "minimal_extension"
+    shutil.copytree(ROOT / "examples" / "minimal_extension", minimal)
+    for interpreter in (app_python, source_python):
+        if interpreter == source_python:
+            run(
+                [interpreter, "-I", "-m", "pip", "install", ROOT / "packages" / "moonfox-app"],
+                cwd=outside,
+                env=env,
+            )
+        installed = json.loads(run([interpreter, "-I", "-c", APP_SMOKE], cwd=outside, env=env))
+        assert set(installed) == expected_app
+        output = run([interpreter, "-I", headless], cwd=outside, env=env)
+        assert "saved=completed; messages=3" in output
+        assert "restored=completed; messages=5; extensions=0" in output
+        output = run([interpreter, "-I", minimal / "run.py"], cwd=outside, env=env)
+        assert "extension=greeting; outcome=completed" in output
+        assert "unloaded=True; prompt_cleared=True" in output
+        run([interpreter, "-I", "-m", "pip", "check"], cwd=outside, env=env)

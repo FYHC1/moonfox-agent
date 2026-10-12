@@ -1,0 +1,21 @@
+[build-system]
+requires = ["hatchling>=1.26,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "moonfox-app"
+version = "0.1.0"
+description = "Headless persistent sessions and extension hosting for Moonfox"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = ["moonfox-ai==0.1.0", "moonfox-agent-core==0.1.0", "pydantic>=2.12,<3", "packaging>=24,<27"]
+
+[tool.uv.sources]
+moonfox-ai = { workspace = true }
+moonfox-agent-core = { workspace = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/moonfox_app"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src", "tests", "README.md", "pyproject.toml"]

@@ -13,14 +13,15 @@ dev = [
 package = false
 
 [tool.uv.workspace]
-members = ["packages/ai", "packages/agent"]
+members = ["packages/ai", "packages/agent", "packages/moonfox-app"]
 
 [tool.uv.sources]
 moonfox-ai = { workspace = true }
 moonfox-agent-core = { workspace = true }
+moonfox-app = { workspace = true }
 
 [tool.pytest.ini_options]
-testpaths = ["packages/ai/tests", "packages/agent/tests", "tests/architecture"]
+testpaths = ["packages/ai/tests", "packages/agent/tests", "packages/moonfox-app/tests", "tests/architecture"]
 addopts = "--import-mode=importlib --strict-markers -ra"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
@@ -29,7 +30,7 @@ markers = ["installation: build and install wheels in isolated environments (opt
 [tool.ruff]
 target-version = "py312"
 line-length = 100
-src = ["packages/ai/src", "packages/agent/src"]
+src = ["packages/ai/src", "packages/agent/src", "packages/moonfox-app/src"]
 include = ["*.py", "*.pyi", "**/pyproject.toml"]
 extend-exclude = ["docs"]
 
@@ -39,7 +40,7 @@ select = ["E", "F", "I", "UP", "B", "ASYNC"]
 [tool.mypy]
 python_version = "3.12"
 strict = true
-files = ["packages/ai/src", "packages/agent/src"]
+files = ["packages/ai/src", "packages/agent/src", "packages/moonfox-app/src"]
 
 [tool.coverage.run]
-source = ["moonfox_ai", "moonfox_agent"]
+source = ["moonfox_ai", "moonfox_agent", "moonfox_app"]
