@@ -8,7 +8,16 @@
     "run_timeout_seconds": 120,
     "allowed_tools": [],
     "approval_tools": [],
-    "enabled_extensions": []
+    "enabled_extensions": [],
+    "generation": {
+      "temperature": null,
+      "top_p": null,
+      "max_tokens": null,
+      "frequency_penalty": null,
+      "presence_penalty": null,
+      "seed": null,
+      "stop": null
+    }
   },
   "max_concurrent_requests": 2,
   "approval_timeout_seconds": 60,

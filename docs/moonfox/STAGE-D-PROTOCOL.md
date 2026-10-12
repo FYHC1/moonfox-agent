@@ -4,7 +4,7 @@
 
 ## 鉴权与启动
 
-REST 用 `Authorization: Bearer <token>`。token 只注入宿主（示例环境变量 `MOONFOX_ADMIN_TOKEN`），不返回给客户端、不写日志/URL/产品配置。WebUI token 仅保存在内存，刷新需重连认证。服务端校验非空 Origin（必须为显式 allowlist），WS 必须有合法 Origin。WS 接受连接后 5 秒内第一帧为 Subscribe DTO（含 token），认证/会话授权成功前绝不发送会话数据。CLI 默认 localhost；真实 provider 由宿主注入，示例明确标识为离线 demo。
+REST 用 `Authorization: Bearer <token>`。token 只注入宿主（示例环境变量 `MOONFOX_ADMIN_TOKEN`），不返回给客户端、不写日志/URL/产品配置。WebUI token 仅保存在内存，刷新需重连认证。服务端校验非空 Origin（必须为显式 allowlist），WS 必须有合法 Origin。WS 接受连接后 5 秒内第一帧为 Subscribe DTO（含 token），认证/会话授权成功前绝不发送会话数据。CLI 默认 loopback，空目录可先配置提供商；离线 demo 须显式启用。
 
 ## HTTP
 
@@ -20,6 +20,9 @@ REST 用 `Authorization: Bearer <token>`。token 只注入宿主（示例环境�
 - `PUT /api/v1/config`，UpdateHostConfig → ConfigView，管理员，CAS；新 defaults 用于新会话，现有会话保留已保存配置；全局队列/并发参数明确启动期生效。
 - `POST /api/v1/sessions/{id}/approvals/{approval_id}`，ApprovalCommand → ApprovalView。审批只在对应会话/工具调用生效一次；拒绝、过期、取消都 fail-closed。
 - `GET /api/v1/protocol` → `{protocol_version:1, schemas:{...}}`，认证。
+- 管理员提供商/模型 CRUD、检测/发现、设默认接口及 DTO：见 [PROVIDER-MANAGEMENT.md](PROVIDER-MANAGEMENT.md)。所有写入 CAS，密钥只写、不在模型/会话/配置响应中出现；有依赖的删除拒绝，配置编辑只影响下一次 run。
+
+`SessionSettings.generation` 为可选新增字段（旧持久配置按默认空对象加载）；temperature/top_p/max_tokens/penalties/seed/stop 的 null 表示继承模型默认，stop=[] 表示清空。JSON Schema 与前端由同一个定义导出。
 
 异常：认证 401、会话授权 403、不存在 404、冲突/忙/修订不符 409、预算拒绝 429、输入/schema 422。错误不包含堆栈/provider 密钥。可选静态托管根 `/`；没有前端产物时 API 仍可工作。
 
@@ -42,4 +45,4 @@ payload：
 
 ## 显示职责
 
-独立 `packages/web-ui`，Vite + 原生 JS 模块，Node test runner + AJV schema 校验；无需为后端安装前端。中文界面：登录/连接、会话列表/新建、消息与流式反馈、运行/队列/预算、停止/显式继续、配置修订冲突、审批和扩展状态；无会话/载入/错误/离线/重连状态。无任意 HTML 渲染，不存 provider 密钥，不在浏览器维护业务 run 或持久队列。
+独立 `packages/web-ui`，Vite + 原生 JS 模块，Node test runner + AJV schema 校验；无需为后端安装前端。中文界面：登录/连接、会话列表/新建、消息与流式反馈、运行/队列/预算、停止/显式继续、配置修订冲突、审批、扩展状态、管理员多提供商/模型与参数管理；无会话/载入/错误/离线/重连状态。无任意 HTML 渲染，不在浏览器持久保存 provider 密钥或业务 run/队列。

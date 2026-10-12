@@ -2,6 +2,8 @@
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .providers import GenerationParameters
+
 
 class SessionSettings(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
@@ -15,6 +17,7 @@ class SessionSettings(BaseModel):
     allowed_tools: tuple[str, ...] = ()
     approval_tools: tuple[str, ...] = ()
     enabled_extensions: tuple[str, ...] = ()
+    generation: GenerationParameters = Field(default_factory=GenerationParameters)
 
     @model_validator(mode="after")
     def check_consistency(self) -> "SessionSettings":

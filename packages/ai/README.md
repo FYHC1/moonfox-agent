@@ -1,6 +1,6 @@
 # moonfox-ai
 
-独立的模型消息、事件流、transcript 重放与脚本化 faux provider。运行时仅依赖 Python 标准库。
+独立的模型消息、事件流、transcript 重放、faux provider，以及 OpenAI-compatible Chat Completions / Anthropic Messages 流式适配器。运行时仅依赖 Python 标准库。
 
 公开接口：`moonfox_ai.api`。Python ≥ 3.12。
 
@@ -23,3 +23,13 @@ asyncio.run(main())
 `EventStream` 是单生产者、单迭代消费者的有界流，不是广播通道。`result()` 与迭代独立；缓存溢出明确通知迭代消费者，不影响最终结果。`partial` 是共享 live 对象，保存快照应使用 `deepcopy`。提前放弃流时调用 `await stream.aclose()`。
 
 faux 支持文本、thinking、工具调用、错误、延迟和结构化取消信号，无网络与密钥要求。脚本耗尽属于测试/调用错误，会抛出异常；模拟的模型失败编码为 `Error` 事件。
+
+## 远端协议（注入传输）
+
+`OpenAIProvider(transport, base_url=..., api_key=...)` 和 `AnthropicProvider(...)` 提供相同的 `.stream(model, transcript, options)`；`transport` 遵循公开 `HTTPTransport`，返回具有 `status`、`headers`、`iter_lines()`、`aclose()` 的 `HTTPResponse`。AI 包不安装 HTTP 客户端、不读取环境/配置、不存密钥，不自动重试。应用可选 `providers` extra 提供 httpx 传输，也可注入其它实现。
+
+- 支持增量文本/工具参数、用量、终止原因、受保护取消与响应清理；只有收尾完成才发布终态。传输须响应 task 取消并最终完成关闭。
+- 生成字段包含 temperature、top_p、max_tokens、penalties、seed、stop；空元组 stop 明确清空停止词。不支持的协议选项在网络前拒绝，编程错误不伪装可重试失败。
+- 用户图片需声明 supports_images；OpenAI 工具结果图片与 assistant 图片历史显式拒绝。Anthropic 扩展思考请求暂不支持；OpenAI 仅在声明 supports_reasoning 后发送 low/medium/high。
+- 命名空间工具名自动映射为稳定协议别名，返回时恢复原名；历史/权限不改名。请求移除工具审计等非模型数据。
+- SSE 帧/总流量有界，缺终止标记视作错误；HTTP 错误不包含原始 body/key。真实厂商兼容性还需操作者使用自己的服务验证，测试只使用合成 HTTP/SSE。

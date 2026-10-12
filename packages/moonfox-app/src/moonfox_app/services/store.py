@@ -19,6 +19,8 @@ from moonfox_ai.api import now_ms
 from moonfox_app.config import HostSettings, SessionSettings
 
 from .errors import BudgetExceeded, ConflictError, NotFoundError
+from .provider_store import SCHEMA as PROVIDER_SCHEMA
+from .provider_store import ProviderStore
 from .types import Domain, InputRecord, LogicalBudget, SessionRecord
 
 _SCHEMA = """
@@ -92,10 +94,12 @@ class HostStore:
             self._db.execute("PRAGMA journal_mode=WAL")
             self._db.execute("PRAGMA synchronous=FULL")
             version = self._db.execute("PRAGMA user_version").fetchone()[0]
-            if version not in (0, 1):
+            if version not in (0, 1, 2):
                 raise ValueError("Unsupported host database version")
             self._db.executescript(_SCHEMA)
-            self._db.execute("PRAGMA user_version=1")
+            self._db.executescript(PROVIDER_SCHEMA)
+            self._db.execute("PRAGMA user_version=2")
+            self.providers = ProviderStore(self._db)
             self._db.execute(
                 "INSERT OR IGNORE INTO config VALUES(1,1,?)",
                 ((defaults or HostSettings()).model_dump_json(),),

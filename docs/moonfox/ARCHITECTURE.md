@@ -108,7 +108,7 @@ Python 三个主包分别拥有 pyproject、wheel 和测试；其中**核心仅�
 
 ## 4. 规划目录
 
-以下为目标目录；A/B 已创建独立 ai/agent，C 已创建 runtime/extension_api/extensions，D 已增加 services/config/security、可选 server、CLI 和独立 web-ui。具体业务扩展/jobs 的完整持久作业系统按后续阶段推进。阶段 D 的实际范围及限制见 [STAGE-D.md](STAGE-D.md)。
+以下为目标目录；A/B 已创建独立 ai/agent，C 已创建 runtime/extension_api/extensions，D 已增加 services/config/security、可选 server、CLI 和独立 web-ui，管理补充增加共享 ModelCatalog、凭据保护与双协议流式适配。AI 只使用注入 HTTPTransport，httpx 属应用可选 `providers` extra；WebUI/headless/QQ 使用同一目录。具体业务扩展/jobs 的完整持久作业系统按后续阶段推进。实际范围及限制见 [STAGE-D.md](STAGE-D.md) 与 [PROVIDER-MANAGEMENT.md](PROVIDER-MANAGEMENT.md)。
 
 ~~~text
 moonfox-agent/
@@ -126,7 +126,7 @@ moonfox-agent/
 │   │   │   ├── transcript.py
 │   │   │   ├── estimate.py
 │   │   │   ├── overflow.py
-│   │   │   └── providers/           # base / faux / 首个真实 provider
+│   │   │   └── providers/           # base / faux / HTTP 契约 / OpenAI / Anthropic
 │   │   └── tests/
 │   ├── agent/
 │   │   ├── pyproject.toml

@@ -95,11 +95,13 @@ class AgentSession:
         compaction_settings: CompactionSettings | None = None,
         notification_timeout: float = 5.0,
         permission_timeout: float = 5.0,
+        tools_enabled: bool = True,
     ) -> None:
         if permission_timeout <= 0:
             raise ValueError("Permission timeout must be positive")
         self._manager = manager
         self._tools = tuple(tools)
+        self._tools_enabled = tools_enabled
         self._permission = permission_checker
         self._permission_timeout = permission_timeout
         self._prompt_options = prompt_options or PromptPipelineOptions()
@@ -171,6 +173,8 @@ class AgentSession:
         self._extensions = port
 
     def _all_tools(self) -> list[AgentTool]:
+        if not self._tools_enabled:
+            return []
         tools = [*self._tools, *(self._extensions.tools() if self._extensions else ())]
         if len({tool.name for tool in tools}) != len(tools):
             raise ValueError("Application and extension tool names conflict")

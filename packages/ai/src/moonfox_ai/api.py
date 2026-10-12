@@ -8,8 +8,11 @@ from .estimate import (
     estimate_text_tokens,
 )
 from .overflow import is_context_overflow, is_recoverable_length
+from .providers.anthropic import AnthropicProvider
 from .providers.base import AbortSignal, ProviderResponse, StreamFn, StreamOptions
 from .providers.faux import FauxProvider, FauxResponse, FauxScriptExhausted
+from .providers.http import HTTPRequest, HTTPResponse, HTTPTransport
+from .providers.openai import OpenAIProvider
 from .stream import (
     AssistantMessageEventStream,
     EventStream,
@@ -69,6 +72,7 @@ from .types import (
 
 __all__ = [
     "AbortSignal",
+    "AnthropicProvider",
     "AssistantMessage",
     "AssistantMessageEvent",
     "AssistantMessageEventStream",
@@ -83,12 +87,16 @@ __all__ = [
     "FauxProvider",
     "FauxResponse",
     "FauxScriptExhausted",
+    "HTTPRequest",
+    "HTTPResponse",
+    "HTTPTransport",
     "HasToolDeclaration",
     "ImageContent",
     "IncompleteStreamError",
     "Message",
     "Model",
     "NestedToolCall",
+    "OpenAIProvider",
     "ProviderResponse",
     "Start",
     "StopReason",

@@ -7,7 +7,7 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
 from moonfox_agent.api import AgentTool, RunOptions, RunOutcome
-from moonfox_ai.api import Model, StreamFn, UserMessage
+from moonfox_ai.api import HTTPTransport, Model, StreamFn, UserMessage
 
 from .config import HostSettings
 from .extension_api import (
@@ -28,7 +28,9 @@ from .runtime.session.entries import EntryDraft, ModelChangeDraft, ThinkingLevel
 from .runtime.session.manager import SessionManager
 from .runtime.session.orchestration import AgentSession
 from .runtime.storage import JsonlSessionStore, SessionStore
+from .security.secrets import SecretProtector
 from .services.hub import SessionHub
+from .services.model_catalog import ModelCatalog
 from .services.store import HostStore
 from .services.types import ModelRegistration, SessionRecord, SessionRuntime
 
@@ -236,6 +238,8 @@ def create_application(
     models: Mapping[str, ModelRegistration],
     defaults: HostSettings | None = None,
     tools: Sequence[AgentTool] = (),
+    provider_transport: HTTPTransport | None = None,
+    secret_protector: SecretProtector | None = None,
     registry: ExtensionRegistry | None = None,
     extension_manifests: Sequence[ExtensionManifest] = (),
     extension_grants: Mapping[str, frozenset[str]] | None = None,
@@ -249,7 +253,13 @@ def create_application(
     service imports bootstrap or server; runtime factory and projection loader are ports.
     """
     store = HostStore(home, defaults=defaults)
-    catalog = dict(models)
+    try:
+        catalog = ModelCatalog(
+            store, models, transport=provider_transport, protector=secret_protector
+        )
+    except BaseException:
+        store.close()
+        raise
     extension_registry = registry or ExtensionRegistry()
     granted = dict(extension_grants or {})
 
@@ -272,7 +282,7 @@ def create_application(
             return SessionManager.create(
                 data,
                 binding=binding,
-                model=catalog[record.settings.model_id].model,
+                model=catalog.model_descriptor(record.settings.model_id),
                 system_prompt=system_prompt,
                 thinking_level=record.settings.thinking_level,
                 codecs=codecs,
@@ -302,10 +312,13 @@ def create_application(
         return SessionBinding(record.id, record.scope_id)
 
     async def factory(
-        record: SessionRecord, stream: StreamFn, permission: PermissionChecker
+        record: SessionRecord,
+        stream: StreamFn,
+        permission: PermissionChecker,
+        source: ModelRegistration,
     ) -> SessionRuntime:
         settings = record.settings
-        model = catalog[settings.model_id].model
+        model = source.model
         manager = transcript(record)
         session: AgentSession | None = None
         extensions: SessionExtensionManager | None = None
@@ -323,6 +336,7 @@ def create_application(
                 manager,
                 stream_fn=stream,
                 tools=[tool for tool in tools if tool.name in settings.allowed_tools],
+                tools_enabled=source.supports_tools,
                 permission_checker=permission,
                 compaction_policy=compaction_factory(stream, model) if compaction_factory else None,
                 permission_timeout=store.config()[1].approval_timeout_seconds + 5,
@@ -352,13 +366,14 @@ def create_application(
     try:
         return SessionHub(
             store,
-            models=catalog,
+            models=models,
             runtime_factory=factory,
             load_view=load_view,
             tools=[tool.name for tool in tools],
             extensions=extension_manifests,
             validate_extensions=validate_extensions,
             compact_enabled=compaction_factory is not None,
+            model_catalog=catalog,
         )
     except BaseException:
         store.close()

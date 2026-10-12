@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Moonfox Stage D headless service / WebUI demo")
+    parser = argparse.ArgumentParser(description="Moonfox provider-managed service and WebUI")
     parser.add_argument(
         "--home", type=Path, required=True, help="Explicit private application data directory"
     )
@@ -21,10 +21,6 @@ def main() -> None:
         "--demo", action="store_true", help="Enable explicitly offline demonstration provider"
     )
     args = parser.parse_args()
-    if not args.demo:
-        parser.error(
-            "CLI currently requires --demo; embed create_application to inject a real provider"
-        )
     token = os.environ.get("MOONFOX_ADMIN_TOKEN", "")
     if len(token) < 24:
         parser.error("Set MOONFOX_ADMIN_TOKEN to a random token of at least 24 characters")
@@ -47,7 +43,9 @@ def main() -> None:
             "demo": ModelRegistration(
                 Model("demo", "demo", "faux", max_tokens=2048), demo_stream, "离线演示 · 非真实模型"
             )
-        },
+        }
+        if args.demo
+        else {},
         defaults=load_settings(args.config) if args.config else None,
     )
     app = create_server(

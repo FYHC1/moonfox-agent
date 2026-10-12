@@ -429,6 +429,57 @@
   .settings-footer { display: flex; flex-direction: column; gap: 12px; padding-top: 20px; }
   .settings-footer > .button-primary { width: 100%; }
   .drawer-backdrop { position: fixed; inset: 0; z-index: 30; background: #070c1699; backdrop-filter: blur(2px); border: 0; cursor: default; }
+
+  /* Independent administration surface; never tied to an active conversation. */
+  .provider-manager-entry { width: 100%; justify-content: flex-start; margin-bottom: 14px; color: #d6c0ae; border: 1px solid var(--line); background: var(--copper-wash); }
+  .management-dialog { width: min(1000px, calc(100% - 40px)); max-width: none; max-height: calc(100dvh - 48px); padding: 0; overflow-y: auto; overscroll-behavior: contain; border: 1px solid #435062; border-radius: 18px; background: var(--panel); color: var(--text); box-shadow: 0 32px 120px #0009; animation: enter-card 200ms var(--spring) both; }
+  .management-dialog::backdrop { background: #060a13c9; backdrop-filter: blur(6px); }
+  .management-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 26px 28px 12px; }
+  .management-heading h2 { margin-top: 7px; font-size: 23px; }
+  .management-description { padding: 0 28px 22px; color: var(--muted); font-size: 12px; max-width: 820px; line-height: 1.9; }
+  .management-controls { border: 0; padding: 0; margin: 0; min-width: 0; }
+  .management-nav { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 28px; border-block: 1px solid var(--line); background: var(--sidebar); }
+  .management-tabs { display: flex; gap: 4px; }
+  .management-tabs [aria-selected='true'] { color: var(--copper); background: var(--copper-wash); }
+  .management-feedback { padding-inline: 28px; }
+  .management-feedback:not(:empty) { padding-top: 18px; }
+  .management-content { padding: 24px 28px 28px; min-height: 300px; }
+  .management-stack, .management-form { display: flex; flex-direction: column; gap: 20px; }
+  .management-toolbar, .management-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+  .management-toolbar > div { min-width: 0; }
+  .management-toolbar > .button { flex-shrink: 0; }
+  .management-toolbar h3 { font-size: 16px; margin-bottom: 5px; }
+  .management-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  .management-card { min-width: 0; padding: 18px; background: #101925; border: 1px solid var(--line); border-radius: 12px; overflow-wrap: anywhere; }
+  .management-card h4 { font-size: 15px; font-weight: 500; margin: 0; }
+  .management-card-heading .badge { flex-shrink: 0; }
+  .management-id { display: block; color: var(--dim); font-size: 10px; margin: 3px 0 12px; }
+  .management-protocol { font-size: 12px; margin-bottom: 7px; color: var(--muted); }
+  .management-endpoint { display: block; font-size: 11px; color: #c9b8aa; word-break: break-word; }
+  .management-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 14px 0 8px; font-size: 10px; color: var(--dim); }
+  .management-empty { display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; padding: 32px 20px; color: var(--muted); border: 1px dashed var(--line); border-radius: 12px; }
+  .management-empty p { font-size: 12px; max-width: 420px; }
+  .management-empty svg { color: var(--copper); }
+  .provider-test-result { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--line); padding-top: 14px; margin-top: 14px; }
+  .discovered-models { padding: 0; margin: 0; list-style: none; max-height: 280px; overflow: auto; }
+  .discovered-models li { display: flex; align-items: center; justify-content: space-between; gap: 10px; border-bottom: 1px solid var(--line-quiet); padding: 10px 0; }
+  .discovered-models li > div { min-width: 0; }
+  .discovered-models strong { font-size: 12px; font-weight: 400; display: block; }
+  .discovered-models code { font-size: 10px; color: var(--dim); }
+  .discovered-models .button { flex-shrink: 0; }
+  .management-form-grid, .generation-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 18px; }
+  .management-wide { grid-column: 1 / -1; }
+  .management-form .dialog-actions { margin-top: 0; padding-top: 18px; border-top: 1px solid var(--line); }
+  .management-form input[readonly] { color: var(--dim); border-style: dashed; }
+  .management-form input, .management-form select { min-height: 42px; }
+  .management-form input[type='checkbox'] { min-height: 0; }
+  .management-generation { border-top: 1px solid var(--line); padding-top: 22px; }
+  .management-generation h3 { margin-bottom: 12px; }
+  .generation-editor { display: flex; flex-direction: column; gap: 16px; }
+  .generation-editor > .field-hint:empty { display: none; }
+  .generation-editor textarea { resize: vertical; min-height: 80px; font-size: 12px; }
+  .settings-form .generation-fields { gap: 16px 12px; }
+  .settings-form .generation-fields .field:nth-child(3) { grid-column: 1 / -1; }
 }
 
 @layer responsive {
@@ -444,6 +495,20 @@
     .connection-card { padding: 28px; }
   }
   @media (max-width: 759px) {
+    .management-dialog { width: calc(100% - 16px); max-height: calc(100dvh - 16px); border-radius: 12px; }
+    .management-heading { padding: 18px 16px 10px; }
+    .management-heading h2 { font-size: 20px; }
+    .management-description { padding: 0 16px 16px; font-size: 11px; }
+    .management-nav { padding: 8px 12px; gap: 4px; }
+    .management-nav > .button { font-size: 11px; padding: 8px; }
+    .management-feedback { padding-inline: 16px; }
+    .management-content { padding: 18px 16px; }
+    .management-list, .management-form-grid { grid-template-columns: minmax(0, 1fr); }
+    .management-toolbar { flex-wrap: wrap; gap: 10px; }
+    .management-card { padding: 14px; }
+    .management-dialog .button, .management-dialog input:not([type='checkbox']), .management-dialog select { min-height: 44px; }
+    .management-dialog .icon-button { height: 44px; width: 44px; }
+    .management-dialog .generation-fields { grid-template-columns: minmax(0, 1fr); }
     .connection-page { padding: 24px 20px 16px; }
     .connection-header .protocol-label { font-size: 8px; letter-spacing: .5px; }
     .connection-main { width: min(100%, 440px); grid-template-columns: minmax(0, 1fr); gap: 28px; padding: 40px 0; }

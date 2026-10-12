@@ -195,6 +195,15 @@
       "allowed_tools": [],
       "approval_tools": [],
       "enabled_extensions": [],
+      "generation": {
+        "frequency_penalty": null,
+        "max_tokens": null,
+        "presence_penalty": null,
+        "seed": null,
+        "stop": null,
+        "temperature": null,
+        "top_p": null
+      },
       "max_requests_per_input": 8,
       "max_tokens_per_input": 64000,
       "max_turns_per_run": 4,

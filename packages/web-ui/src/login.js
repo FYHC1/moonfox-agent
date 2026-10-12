@@ -66,7 +66,7 @@ export function connectionScreen({ origin, message, onConnect }) {
         el('h2', { id: 'connection-title' }, '欢迎回到 Moonfox'),
         el('p', { class: 'muted' }, '连接你的后端，继续未完的思路。'), form,
         el('div', { class: 'demo-disclosure' }, el('span', { class: 'demo-mark' }, 'DEMO'),
-          el('div', {}, el('strong', {}, '默认示例为离线演示'), el('p', {}, 'Demo provider 使用预设回复，不调用真实 AI。模型、工具与扩展能力以宿主配置为准。'))))),
+          el('div', {}, el('strong', {}, '离线演示为可选模式'), el('p', {}, '登录后可管理提供商与模型。启用 --demo 时使用预设回复，不调用真实 AI；能力以宿主配置为准。'))))),
     el('footer', { class: 'connection-footer' }, el('span', {}, 'MOONFOX / PERSONAL AGENT WORKSPACE'),
       el('span', {}, '关闭页面不会停止服务端任务')));
 }

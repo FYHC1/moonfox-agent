@@ -21,6 +21,7 @@ from moonfox_ai.api import (
     now_ms,
 )
 
+from .errors import BudgetExceeded
 from .store import HostStore
 
 
@@ -45,13 +46,24 @@ class ModelGateway:
         self._store = store
         self._semaphore = asyncio.Semaphore(concurrency)
 
-    def bind(self, logical_id: str, provider: StreamFn) -> StreamFn:
+    def bind(
+        self, logical_id: str, provider: StreamFn, *, defaults: StreamOptions | None = None
+    ) -> StreamFn:
         def stream(
             model: Model, context: TranscriptContext, options: StreamOptions | None = None
         ) -> AssistantMessageEventStream:
             output = AssistantMessageEventStream()
             snapshot = deepcopy(context)
-            settings = replace(options) if options is not None else StreamOptions()
+            settings = deepcopy(defaults) if defaults is not None else StreamOptions()
+            if options is not None:
+                settings = replace(
+                    settings,
+                    **{
+                        name: getattr(options, name)
+                        for name in StreamOptions.__dataclass_fields__
+                        if getattr(options, name) is not None
+                    },
+                )
 
             async def produce() -> None:
                 upstream: AssistantMessageEventStream | None = None
@@ -88,7 +100,13 @@ class ModelGateway:
                         estimate_message_tokens(message)
                         for message in collapse_system_messages(snapshot.messages)
                     )
-                    maximum = settings.max_tokens or model.max_tokens or 2048
+                    maximum = min(
+                        settings.max_tokens or model.max_tokens or 2048, model.max_tokens or 262144
+                    )
+                    if model.context_window is not None:
+                        maximum = min(maximum, model.context_window - estimated)
+                        if maximum < 1:
+                            raise BudgetExceeded("Estimated request exceeds model context window")
                     reserved = self._store.reserve_request(logical_id, estimated, maximum)
                     upstream = provider(model, snapshot, replace(settings, max_tokens=reserved))
                     try:

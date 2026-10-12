@@ -42,10 +42,10 @@ export class ApiClient {
 
   clearCredentials() { this.#token = ''; }
 
-  async request(path, { method = 'GET', body, inputSchema, outputSchema, signal } = {}) {
+  async request(path, { method = 'GET', body, inputSchema, outputSchema, signal, timeout = this.timeout } = {}) {
     if (inputSchema) assertContract(inputSchema, body);
     const timeoutController = new AbortController();
-    const timer = setTimeout(() => timeoutController.abort(), this.timeout);
+    const timer = setTimeout(() => timeoutController.abort(), timeout);
     const requestSignal = signal ? AbortSignal.any([signal, timeoutController.signal]) : timeoutController.signal;
     let response;
     let data;
@@ -61,7 +61,10 @@ export class ApiClient {
       });
       let raw;
       try { raw = await response.text(); } catch { throw new ApiError(0); }
-      try { data = JSON.parse(raw); } catch {
+      try {
+        data = JSON.parse(raw, (_key, value) => typeof value === 'string' && body?.api_key
+          ? value.replaceAll(body.api_key, '[凭据已隐藏]') : value);
+      } catch {
         if (!response.ok) throw new ApiError(response.status);
         throw new ProtocolError('JSON response');
       }
@@ -71,7 +74,8 @@ export class ApiClient {
       throw new ApiError(0);
     } finally { clearTimeout(timer); }
     if (!response.ok) {
-      let detail = typeof data?.detail === 'string' ? data.detail : '';
+      // Management failures must never echo upstream responses or submitted provider keys.
+      let detail = /^\/(providers|models)(\/|$)/.test(path) ? '' : typeof data?.detail === 'string' ? data.detail : '';
       if (this.#token) detail = detail.replaceAll(this.#token, '[凭据已隐藏]');
       throw new ApiError(response.status, detail.slice(0, 1200));
     }
@@ -111,6 +115,51 @@ export class ApiClient {
   }
 
   catalog(signal) { return this.request('/config', { outputSchema: 'ConfigView', signal }); }
+
+  providers(signal) { return this.request('/providers', { outputSchema: 'ProviderCatalog', signal }); }
+  models(signal) { return this.request('/models', { outputSchema: 'ModelCatalog', signal }); }
+
+  async putProvider(id, body, signal) {
+    assertContract('PutProvider', body);
+    const action = body.secret_action ?? 'keep';
+    // Pydantic's cross-field validators are not represented by JSON Schema.
+    if (action === 'replace'
+      ? typeof body.api_key !== 'string' || !body.api_key.trim() || /[\x00-\x1f\x7f]/.test(body.api_key) || (body.settings.auth_mode ?? 'stored') !== 'stored'
+      : body.api_key != null) throw new ProtocolError('PutProvider');
+    return this.request(`/providers/${encodeURIComponent(id)}`, {
+      method: 'PUT', body, inputSchema: 'PutProvider', outputSchema: 'ProviderView', signal,
+    });
+  }
+
+  putModel(id, body, signal) {
+    return this.request(`/models/${encodeURIComponent(id)}`, {
+      method: 'PUT', body, inputSchema: 'PutModel', outputSchema: 'ManagedModelView', signal,
+    });
+  }
+
+  testProvider(id, body, signal) {
+    return this.request(`/providers/${encodeURIComponent(id)}/test`, {
+      method: 'POST', body, inputSchema: 'RevisionCommand', outputSchema: 'ProviderTestResult', signal, timeout: Math.max(this.timeout, 40000),
+    });
+  }
+
+  deleteProvider(id, body, signal) {
+    return this.request(`/providers/${encodeURIComponent(id)}/delete`, {
+      method: 'POST', body, inputSchema: 'RevisionCommand', outputSchema: 'Deleted', signal,
+    });
+  }
+
+  deleteModel(id, body, signal) {
+    return this.request(`/models/${encodeURIComponent(id)}/delete`, {
+      method: 'POST', body, inputSchema: 'RevisionCommand', outputSchema: 'Deleted', signal,
+    });
+  }
+
+  setDefaultModel(id, body, signal) {
+    return this.request(`/models/${encodeURIComponent(id)}/default`, {
+      method: 'POST', body, inputSchema: 'SetDefaultModel', outputSchema: 'ConfigView', signal,
+    });
+  }
 
   async configure(id, body, signal) {
     const data = await this.request(`/sessions/${encodeURIComponent(id)}/config`, {

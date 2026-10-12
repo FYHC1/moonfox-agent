@@ -1,14 +1,14 @@
 # 阶段 D：应用服务、协议与 WebUI
 
-阶段 C 已先提交并推送为 `012211b`，之后开始本阶段。依赖方向仍是 app → agent → ai；runtime/SDK 不依赖 services 或 Web 框架。阶段 D 不实现真实 provider、具体人设/记忆/QQ 协议扩展。
+阶段 C 已先提交并推送为 `012211b`，D 基线已推送为 `15b5694`，之后追加提供商与模型基础管理。依赖方向仍是 app → agent → ai；runtime/SDK 不依赖 services 或 Web 框架。当前支持 OpenAI-compatible/Anthropic 协议，不实现具体人设/记忆/QQ 扩展。
 
-## 启动演示
+## 启动工作台
 
-后端使用显式离线 demo provider，**不是模型推理**。需 Python ≥3.12（当前实测 3.14.8）及 Node ≥22.12（仅前端）。
+需 Python ≥3.12（当前实测 3.14.8）及 Node ≥22.12（仅前端）。可空目录启动，先在 WebUI 管理提供商/模型，再创建会话；加 `--demo` 才启用明确标识的离线预设回复。
 
 ```powershell
-# 在仓库根，已有开发环境可直接补装 server extra
-.\.venv\Scripts\python.exe -m pip install --group dev -e .\packages\ai -e .\packages\agent -e ".\packages\moonfox-app[server]"
+# 在仓库根，已有开发环境可直接补装 server/providers extras
+.\.venv\Scripts\python.exe -m pip install --group dev -e .\packages\ai -e .\packages\agent -e ".\packages\moonfox-app[server,providers]"
 .\.venv\Scripts\python.exe scripts\export_protocol.py
 npm.cmd --prefix packages/web-ui ci
 npm.cmd --prefix packages/web-ui run build
@@ -16,7 +16,7 @@ npm.cmd --prefix packages/web-ui run build
 # 在当前终端生成随机管理员令牌；请保存供连接表单使用，不要提交到 Git
 $env:MOONFOX_ADMIN_TOKEN = .\.venv\Scripts\python.exe -c "import secrets; print(secrets.token_urlsafe(32))"
 # 后端显式指定私有数据目录，默认只监听 loopback
-.\.venv\Scripts\python.exe -m moonfox_app.cli --demo --home .moonfox --static-dir packages/web-ui/dist
+.\.venv\Scripts\python.exe -m moonfox_app.cli --home .moonfox --static-dir packages/web-ui/dist
 ```
 
 打开 `http://127.0.0.1:8765`，后端地址填同源，令牌填当前终端中的 `MOONFOX_ADMIN_TOKEN`。令牌仅存在页面内存，刷新后重新输入；不是 provider 密钥，也不能用于 QQ 连接。跨机器需 HTTPS/反向代理与严格 Origin allowlist，自行评估部署边界。
@@ -27,7 +27,7 @@ $env:MOONFOX_ADMIN_TOKEN = .\.venv\Scripts\python.exe -c "import secrets; print(
 
 `create_application(home=..., models=..., defaults=..., tools=..., registry=...)` 构造 SessionHub；`await hub.start()` 显式启动，`await hub.aclose()` 收尾。ASGI lifespan 可负责这两个步骤。只装普通 `moonfox-app` 仍能使用服务，无需 server extra。
 
-- `host.sqlite` 保存会话目录、domain/scope、配置、durable inbox、逻辑输入预算、审批和 outbox；JSONL 保存 transcript。两个事实源不假装共享原子事务。
+- `host.sqlite` 保存会话目录、domain/scope、配置、提供商/模型/加密凭据、durable inbox、逻辑输入预算、审批和 outbox；JSONL 保存 transcript。数据库 v1 自动追加迁移至 v2，两个事实源不假装共享原子事务。
 - 单宿主 OS lease 防止两个进程对同一目录恢复/执行。SQLite WAL/FULL；每次事务不跨 await，不持锁等待模型、审批或网络。
 - 输入在返回 202/pending 回执前写盘。每会话一个执行者，跨会话并行；忙时 FIFO，不依赖浏览器在线。入站幂等键与 request ID 冲突拒绝覆盖。
 - 未领取的 pending 输入可在重启后继续；已领取运行中输入标为 `unknown`，不自动重放有副作用操作。缺失/空/损坏历史文件隔离，不用空会话替换原历史。
@@ -45,12 +45,12 @@ $env:MOONFOX_ADMIN_TOKEN = .\.venv\Scripts\python.exe -c "import secrets; print(
 
 ## 运行预算与模型注入
 
-宿主必须显式登记 `ModelRegistration(model, stream_fn, label)`，产品配置只能选择登记 ID，不执行用户提供的 Python 路径。CLI 仅离线 demo；真实 provider 可通过 Python 装配注入，尚未提供厂商网络适配。
+可以显式登记 `ModelRegistration(model, stream_fn, label)` 内置模型，也可从空 `models={}` 启动并通过管理员 API/WebUI 配置持久模型。配置只能使用已实现的协议和远端 ID，不执行用户提供的 Python 路径。AI 适配器仅依赖注入的 HTTPTransport；应用可选 `providers` extra 提供 httpx。详见 [提供商管理](PROVIDER-MANAGEMENT.md)。
 
 - 每个 logical input 持久记录请求次数、累计时间、token 预留；显式 continue 不清零。
 - provider gate 共用宿主并发限制；等待者取消后不发请求、不扣请求次数。预算准入在调用 provider 之前。
 - token 预留使用上下文估算 + 输出上限，失败/崩溃不退款；若实际 usage 超过预留，追加记账并阻止后续超限请求。估算不是精确 tokenizer，依赖 provider 遵守 max_tokens，不宣称严格计费金额上限。
-- 压缩策略由 `compaction_factory(gated_stream, model)` 注入，需通过同一计量 stream；默认禁用。没有真实 provider 的金额/汇率策略、Retry-After 重试或分布式限流，留待有实际 provider 后实现。
+- 压缩策略由 `compaction_factory(gated_stream, model)` 注入，需通过同一计量 stream；默认禁用。不提供金额/汇率策略、Retry-After 自动重试或分布式限流。
 - run 结束撤销临时 provider/权限端口，空闲扩展不能挪用上一次 logical input 的预算。
 
 ## 通道接缝（无 OneBot 实现）
@@ -67,7 +67,7 @@ $env:MOONFOX_ADMIN_TOKEN = .\.venv\Scripts\python.exe -c "import secrets; print(
 - snapshot 含 epoch/seq；订阅原子补发水位后的有界事件。断线/过旧水位/慢客户端溢出要求 resync，前端重取快照，不重放输入或拼接缺失文本。
 - 稳定 message ID 关联 start/delta/end；完成消息替换已有卡片。wire 不发送 core `partial`、reasoning、内部 scope、审计或原始 provider 错误。
 - 关闭页面/断开订阅不调用 cancel。只有显式控制命令改变运行状态。
-- 中文独立 WebUI：认证、会话列表/新建、消息/工具卡片、流式状态、停止/显式继续、配置修订冲突、单次审批和扩展状态；无任意 HTML 执行、凭据持久化或浏览器业务队列。
+- 中文独立 WebUI：认证、会话列表/新建、消息/工具卡片、流式状态、停止/显式继续、配置修订冲突、单次审批、扩展状态；管理员另有独立提供商/模型管理、只写凭据、显式模型发现、默认模型、模型参数与会话覆盖。无任意 HTML 执行、凭据浏览器持久化或浏览器业务队列。
 
 ## 检查
 

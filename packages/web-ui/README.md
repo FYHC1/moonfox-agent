@@ -1,6 +1,6 @@
 # Moonfox Web UI · Stage D
 
-独立的中文 Agent 工作台。前端只负责显示服务端事实、提交 DTO 与维护瞬时连接；不拥有 Agent、推理状态机、业务队列或持久化凭据。默认示例后端是**离线 demo provider**，不是实际 AI 推理。
+独立的中文 Agent 工作台。前端只负责显示服务端事实、提交 DTO 与维护瞬时连接；不拥有 Agent、推理状态机、业务队列或持久化凭据。管理员可在无会话时管理多个提供商、模型与生成参数；离线预设回复仅通过后端 `--demo` 显式启用。
 
 ## 设计约定
 
@@ -28,11 +28,11 @@ Vite 开发服务默认 `http://localhost:5173`；`/api`（含 WebSocket）代�
 
 ## 协议与依赖
 
-唯一契约源：`moonfox_app.server.schema`、`moonfox_app.config.schema` 与 `docs/moonfox/STAGE-D-PROTOCOL.md`。服务端 exporter `scripts/export_protocol.py` 负责生成 `src/generated/protocol.json` 和 `src/generated/fixtures.json`；先运行 exporter，再安装/构建/测试。**本包不维护生成内容或平行 DTO schema。** AJV2020 对每个完整导出 schema 独立编译，保留其 `$defs`。
+唯一契约源：`moonfox_app.server.schema`、`moonfox_app.config.schema/providers` 与 `docs/moonfox/STAGE-D-PROTOCOL.md`。服务端 exporter `scripts/export_protocol.py` 负责生成 `src/generated/protocol.json` 和 `src/generated/fixtures.json`；先运行 exporter，再安装/构建/测试。**本包不维护生成内容或平行 DTO schema。** AJV2020 对每个完整导出 schema 独立编译，保留其 `$defs`。
 
 运行依赖仅 `ajv`；开发依赖 `vite` 与浏览器验收用 `@playwright/test`。`node:test` 覆盖契约、事件投影、HTTP 错误和连接竞争；浏览器集成可由宿主针对真实服务执行。任何验收 mock 都不参与生产包。
 
-`npm.cmd run test:browser` 默认自动启动仅本机的 `browser/fixture-server.mjs` 和 Vite，运行全部 7 项交互/布局测试，退出后关闭服务。夹具导入服务端生成的 schema/数据，只使用固定测试 token，不进入生产构建。Windows 默认使用本机 Edge；其他环境先安装 Playwright Chromium，或设置 `MOONFOX_BROWSER_CHANNEL`。
+`npm.cmd run test:browser` 默认自动启动仅本机的 `browser/fixture-server.mjs` 和 Vite，运行全部 11 项交互/布局测试（含四项管理场景），退出后关闭服务。夹具导入服务端生成的 schema/数据，只使用固定测试 token，不进入生产构建。Windows 默认使用本机 Edge；其他环境先安装 Playwright Chromium，或设置 `MOONFOX_BROWSER_CHANNEL`。
 
 验证真实后端时设置 `MOONFOX_UI_BASE_URL`、`MOONFOX_TEST_BACKEND`、`MOONFOX_TEST_TOKEN` 后运行 `test:browser`；只有基础/真实会话用例执行，夹具专用的错误注入测试跳过。不要对含真实用户数据的服务执行这些创建/输入测试。
 
@@ -43,3 +43,11 @@ Vite 开发服务默认 `http://localhost:5173`；`/api`（含 WebSocket）代�
 - 会话域不可编辑，浏览器只创建 agent 会话；QQ 域仅展示，不提供 QQ 操作。
 - session capability 决定操作可用性；`compact` 不存在时完全不展示该按钮。
 - 输入网络错误保留原始 request/idempotency key 供手动重试；没有客户端持久队列。WS 重连只重取快照与订阅，不重放输入。
+
+## 提供商、模型与参数
+
+侧栏“提供商与模型”仅管理员可见，空会话目录也能打开。支持 OpenAI-compatible/Anthropic 协议、CRUD/CAS、启停、显式检测/发现模型、手工模型 ID、能力与上限、默认模型。发现只访问模型列表，不发送聊天或生成请求。
+
+API 密钥只写：空白保留、填写替换、勾选明确清除；提交前清空密码输入，失败不回显服务端原文，不写 localStorage/sessionStorage。远端 HTTPS，本机可 HTTP；修改 stored-key 地址需重新输入/清除密钥。非 Windows 默认环境变量模式。
+
+模型参数作为默认值；会话配置下相同控件用于覆盖，空值继承、0 是有效值、`stop=[]` 明确清空停止词。模型输出上限与逻辑输入预算独立，服务端最终限制；管理保存不修改活动 run，不自动切换既有会话。详见 [提供商管理](../../docs/moonfox/PROVIDER-MANAGEMENT.md)。

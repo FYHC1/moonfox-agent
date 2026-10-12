@@ -14,7 +14,12 @@ from starlette.staticfiles import StaticFiles
 
 from moonfox_app.config import SessionSettings
 from moonfox_app.security.identity import AccessDenied, AuthenticationError, TokenAuth
-from moonfox_app.services.errors import BudgetExceeded, ConflictError, NotFoundError
+from moonfox_app.services.errors import (
+    BudgetExceeded,
+    ConflictError,
+    InvalidConfiguration,
+    NotFoundError,
+)
 
 from ._http import (
     HTTPBoundary,
@@ -29,6 +34,7 @@ from ._http import (
 from ._ports import ServerHub
 from ._websocket import serve_events
 from .export import protocol_document
+from .providers import register_provider_routes
 from .schema import (
     DTO,
     PROTOCOL_VERSION,
@@ -87,10 +93,13 @@ def create_server(
         NotFoundError,
         ConflictError,
         BudgetExceeded,
+        InvalidConfiguration,
         RequestValidationError,
         HTTPException,
     ):
         app.add_exception_handler(error, exception_response)
+
+    register_provider_routes(app, hub)
 
     @app.get("/health")
     async def health() -> dict[str, Any]:

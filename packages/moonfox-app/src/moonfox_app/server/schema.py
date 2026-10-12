@@ -2,9 +2,10 @@
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 
 from moonfox_app.config import HostSettings, SessionSettings
+from moonfox_app.config.providers import ModelSettings, ProviderSettings
 
 PROTOCOL_VERSION = 1
 
@@ -167,9 +168,99 @@ class ErrorResponse(DTO):
     detail: str
 
 
+class RevisionCommand(DTO):
+    request_id: str = Field(min_length=1, max_length=128)
+    expected_revision: int = Field(ge=0)
+
+
+class PutProvider(RevisionCommand):
+    settings: ProviderSettings
+    secret_action: Literal["keep", "replace", "clear"] = "keep"
+    api_key: SecretStr | None = Field(default=None, max_length=4096, repr=False)
+
+    @model_validator(mode="after")
+    def check_secret_action(self) -> "PutProvider":
+        if self.secret_action == "replace":
+            if (
+                self.api_key is None
+                or not self.api_key.get_secret_value().strip()
+                or self.settings.auth_mode != "stored"
+            ):
+                raise ValueError("Replacing credentials requires a stored key")
+            if any(ord(c) < 32 or ord(c) == 127 for c in self.api_key.get_secret_value()):
+                raise ValueError("Credential contains control characters")
+        elif self.api_key is not None:
+            raise ValueError("Key must be omitted for keep/clear")
+        return self
+
+
+class ProviderView(DTO):
+    id: str
+    revision: int
+    settings: ProviderSettings
+    key_configured: bool
+    credential_source: Literal["stored", "environment", "none"]
+
+
+class ProviderCatalog(DTO):
+    providers: list[ProviderView]
+    secret_storage: Literal["dpapi", "env_only", "custom"]
+
+
+class DiscoveredModel(DTO):
+    id: str
+    name: str
+
+
+class ProviderTestResult(DTO):
+    ok: bool
+    status: Literal["ok", "auth_error", "unavailable", "unsupported", "invalid_response"]
+    detail: str
+    latency_ms: int
+    models: list[DiscoveredModel]
+
+
+class PutModel(RevisionCommand):
+    settings: ModelSettings
+
+
+class ManagedModelView(DTO):
+    id: str
+    revision: int
+    settings: ModelSettings
+    available: bool
+    unavailable_reason: str | None
+
+
+class ModelCatalog(DTO):
+    models: list[ManagedModelView]
+    builtin_models: list[dict[str, str]]
+    default_model_id: str
+    config_revision: int
+
+
+class SetDefaultModel(RevisionCommand):
+    pass
+
+
+class Deleted(DTO):
+    deleted: Literal[True] = True
+
+
 SCHEMAS: dict[str, type[BaseModel]] = {
     cls.__name__: cls
     for cls in (
+        RevisionCommand,
+        PutProvider,
+        ProviderView,
+        ProviderCatalog,
+        DiscoveredModel,
+        ProviderTestResult,
+        PutModel,
+        ManagedModelView,
+        ModelCatalog,
+        SetDefaultModel,
+        Deleted,
         CreateSession,
         SubmitInput,
         ControlCommand,

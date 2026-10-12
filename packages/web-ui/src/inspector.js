@@ -1,6 +1,7 @@
 import { el, icon, button, badge, note, statusLabel, statusTone, countLabel, modelLabel, timeLabel } from './dom.js';
 import { lastInput, activeInput, pendingInputs, executionIdle } from './state.js';
 import { sessionSettingsSchema } from './protocol.js';
+import { emptyGeneration, generationEditor, generationError } from './generation.js';
 
 const section = (title, content, extra) => el('section', { class: 'inspector-section' },
   el('div', { class: 'section-heading' }, el('h3', {}, title), extra), content);
@@ -59,11 +60,11 @@ export function settingsPanel(state, draft, catalog, { catalogError, catalogLoad
   const form = el('form', { class: 'settings-form', 'aria-label': '会话配置' });
   const change = (key, value) => { onChange(key, value); refreshSaveState(); };
   const options = (catalog?.models ?? []).map((model) => ({ id: model.id ?? model.model_id, name: model.id === 'demo' || model.model_id === 'demo' ? modelLabel('demo') : model.name ?? model.label ?? model.id ?? model.model_id })).filter((model) => model.id);
-  if (!options.some((model) => model.id === settings.model_id)) options.unshift({ id: settings.model_id, name: modelLabel(settings.model_id) });
+  if (!options.some((model) => model.id === settings.model_id)) options.unshift({ id: settings.model_id, name: `${modelLabel(settings.model_id)} · 当前目录不可用` });
   const model = el('select', { id: 'setting-model', disabled: !canEdit, onChange: (event) => change('model_id', event.target.value) },
     options.map((item) => el('option', { value: item.id, selected: item.id === settings.model_id }, item.name)));
   const thinking = el('input', {
-    id: 'setting-thinking', value: settings.thinking_level, required: true, maxlength: sessionSettingsSchema.properties.thinking_level.maxLength,
+    id: 'setting-thinking', value: settings.thinking_level, required: true, maxlength: sessionSettingsSchema.properties.thinking_level.maxLength, list: 'thinking-levels',
     disabled: !canEdit, spellcheck: 'false', onInput: (event) => change('thinking_level', event.target.value),
   });
   form.append(...[note('保存后仅影响下一次运行，当前执行使用原有配置。'),
@@ -73,7 +74,10 @@ export function settingsPanel(state, draft, catalog, { catalogError, catalogLoad
     section('模型与思考', el('div', { class: 'field-stack' },
       el('div', { class: 'field' }, el('label', { for: 'setting-model' }, '模型'), model),
       el('div', { class: 'field' }, el('label', { for: 'setting-thinking' }, '思考级别'), thinking,
-        el('p', { class: 'field-hint' }, '填写宿主支持的级别，如 off；不展示内部推理。'))), el('code', { class: 'revision-label' }, `r${draft.revision}`))].filter(Boolean));
+        el('datalist', { id: 'thinking-levels' }, ['off', 'low', 'medium', 'high'].map((value) => el('option', { value }))),
+        el('p', { class: 'field-hint' }, 'off / low / medium / high；仅支持的模型可启用，由服务端校验。不展示内部推理。'))), el('code', { class: 'revision-label' }, `r${draft.revision}`)),
+    section('模型生成参数', generationEditor({ value: settings.generation, prefix: 'session-generation', disabled: !canEdit,
+      onChange: (value) => change('generation', value) }).element)].filter(Boolean));
   const numericFields = [
     ['max_turns_per_run', '每次运行轮次', '轮'], ['max_requests_per_input', '单输入请求上限', '次'],
     ['max_tokens_per_input', '单输入 token 上限', 'tokens'], ['run_timeout_seconds', '单次运行超时', '秒'],
@@ -122,9 +126,10 @@ export function settingsPanel(state, draft, catalog, { catalogError, catalogLoad
     button('重新载入', { variant: 'ghost', disabled: draft.saving, onClick: onReload }));
   function refreshSaveState() {
     const inconsistent = draft.settings.max_turns_per_run > draft.settings.max_requests_per_input;
-    validation.textContent = inconsistent ? '每次运行轮次不能超过单输入请求上限。' : '';
+    const generationIssue = generationError(draft.settings.generation ?? emptyGeneration());
+    validation.textContent = inconsistent ? '每次运行轮次不能超过单输入请求上限。' : generationIssue;
     if (draft.dirty) footer.querySelector('.notice-success')?.remove();
-    save.disabled = !canEdit || !draft.dirty || draft.saving || inconsistent || ['conflict', 'uncertain'].includes(draft.error?.kind);
+    save.disabled = !canEdit || !draft.dirty || draft.saving || inconsistent || Boolean(generationIssue) || ['conflict', 'uncertain'].includes(draft.error?.kind);
   }
   refreshSaveState();
   form.append(footer);

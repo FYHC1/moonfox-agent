@@ -15,3 +15,7 @@ class BudgetExceeded(RuntimeError):
 
 class ResyncRequired(RuntimeError):
     pass
+
+
+class InvalidConfiguration(ValueError):
+    pass

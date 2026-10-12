@@ -4,7 +4,17 @@ import protocol from './generated/protocol.json' with { type: 'json' };
 // Each exported DTO is a complete schema, with its own $defs namespace.
 const validators = new Map();
 export const protocolVersion = protocol.protocol_version;
+const definitionSources = {
+  SessionSettings: 'UpdateConfig',
+  GenerationParameters: 'PutModel',
+  ProviderSettings: 'PutProvider',
+  ModelSettings: 'PutModel',
+};
 export const sessionSettingsSchema = protocol.schemas.UpdateConfig.$defs.SessionSettings;
+export const providerSettingsSchema = protocol.schemas.PutProvider?.$defs.ProviderSettings;
+export const modelSettingsSchema = protocol.schemas.PutModel?.$defs.ModelSettings;
+export const generationParametersSchema = protocol.schemas.PutModel?.$defs.GenerationParameters
+  ?? protocol.schemas.UpdateConfig.$defs.GenerationParameters;
 
 export class ProtocolError extends Error {
   constructor(schema, errors = []) {
@@ -19,11 +29,11 @@ export class ProtocolError extends Error {
 
 function validator(name) {
   if (!validators.has(name)) {
-    const schema = name === 'SessionSettings'
-      ? { $ref: '#/$defs/SessionSettings', $defs: protocol.schemas.UpdateConfig.$defs }
-      : protocol.schemas[name];
+    const source = protocol.schemas[definitionSources[name]];
+    const schema = protocol.schemas[name] ?? (source?.$defs?.[name]
+      ? { $ref: `#/$defs/${name}`, $defs: source.$defs } : null);
     if (!schema) throw new ProtocolError(name);
-    const ajv = new Ajv2020({ allErrors: true, strict: false, validateFormats: false });
+    const ajv = new Ajv2020({ allErrors: true, strict: false, strictNumbers: true, validateFormats: false });
     validators.set(name, ajv.compile(schema));
   }
   return validators.get(name);

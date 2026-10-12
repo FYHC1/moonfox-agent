@@ -35,7 +35,8 @@ async def check():
     assert all(hasattr(api, name) for name in api.__all__)
     assert asyncio.all_tasks() == before_tasks
     assert threading.enumerate() == before_threads
-    assert not any(name.startswith(('fastapi', 'uvicorn', 'moonfox_ext_')) for name in sys.modules)
+    assert not any(name.startswith(('fastapi', 'uvicorn', 'httpx', 'moonfox_ext_'))
+                   for name in sys.modules)
     if '{module}' == 'moonfox_app.extension_api':
         assert not any(name.startswith(('moonfox_app.bootstrap', 'moonfox_app.runtime',
                                        'moonfox_app.extensions', 'moonfox_app.server'))

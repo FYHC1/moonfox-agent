@@ -68,6 +68,8 @@ def violations(source, module, is_package=False):
                 "cli",
             }:
                 continue
+            elif root == "httpx" and module == "moonfox_app.services.http_transport":
+                continue
             elif root not in sys.stdlib_module_names and root not in ALLOWED_EXTERNAL:
                 errors.append(target)
     return errors
@@ -112,6 +114,8 @@ def test_app_imports_follow_internal_boundaries():
         ("from moonfox_app.server import schema", "moonfox_app.services.hub"),
         ("from moonfox_app.runtime.session import manager", "moonfox_app.server.app"),
         ("import fastapi", "moonfox_app.security.identity"),
+        ("import httpx", "moonfox_app.runtime.session.manager"),
+        ("import httpx", "moonfox_app.services.hub"),
     ],
 )
 def test_app_forbidden_import_negative_cases(source, module):
@@ -125,6 +129,7 @@ def test_app_forbidden_import_negative_cases(source, module):
         ("from moonfox_agent.api import Agent", "moonfox_app.runtime.session.manager"),
         ("from .runtime.session import manager", "moonfox_app.bootstrap"),
         ("from .capabilities import TaskService", "moonfox_app.extension_api"),
+        ("import httpx", "moonfox_app.services.http_transport"),
     ],
 )
 def test_app_allowed_import_cases(source, module):
@@ -138,7 +143,8 @@ def test_headless_distribution_has_no_web_or_business_dependencies():
     assert names == {"moonfox-ai", "moonfox-agent-core", "pydantic", "packaging"}
     assert "moonfox-ai==0.1.0" in dependencies
     assert "moonfox-agent-core==0.1.0" in dependencies
-    assert set(project["optional-dependencies"]) == {"server"}
+    assert set(project["optional-dependencies"]) == {"server", "providers"}
+    assert project["optional-dependencies"]["providers"] == ["httpx>=0.28,<1"]
     assert {re.split(r"[<>=]", req)[0] for req in project["optional-dependencies"]["server"]} == {
         "fastapi",
         "uvicorn",

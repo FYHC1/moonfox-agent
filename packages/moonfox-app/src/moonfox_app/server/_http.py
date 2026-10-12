@@ -14,7 +14,12 @@ from starlette.responses import JSONResponse, Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from moonfox_app.security.identity import AccessDenied, AuthenticationError, Principal, TokenAuth
-from moonfox_app.services.errors import BudgetExceeded, ConflictError, NotFoundError
+from moonfox_app.services.errors import (
+    BudgetExceeded,
+    ConflictError,
+    InvalidConfiguration,
+    NotFoundError,
+)
 
 from .schema import ErrorResponse
 
@@ -56,6 +61,8 @@ async def exception_response(request: Request, exc: Exception) -> JSONResponse:
         status = 409
     elif isinstance(exc, BudgetExceeded):
         status = 429
+    elif isinstance(exc, InvalidConfiguration):
+        status = 422
     elif isinstance(exc, RequestValidationError):
         status = 422
     elif isinstance(exc, HTTPException):

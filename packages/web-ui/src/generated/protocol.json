@@ -75,6 +75,113 @@
     },
     "ConfigView": {
       "$defs": {
+        "GenerationParameters": {
+          "additionalProperties": false,
+          "properties": {
+            "frequency_penalty": {
+              "anyOf": [
+                {
+                  "maximum": 2,
+                  "minimum": -2,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Frequency Penalty"
+            },
+            "max_tokens": {
+              "anyOf": [
+                {
+                  "maximum": 262144,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Max Tokens"
+            },
+            "presence_penalty": {
+              "anyOf": [
+                {
+                  "maximum": 2,
+                  "minimum": -2,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Presence Penalty"
+            },
+            "seed": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Seed"
+            },
+            "stop": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 4,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Stop"
+            },
+            "temperature": {
+              "anyOf": [
+                {
+                  "maximum": 2,
+                  "minimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Temperature"
+            },
+            "top_p": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "maximum": 1,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Top P"
+            }
+          },
+          "title": "GenerationParameters",
+          "type": "object"
+        },
         "HostSettings": {
           "additionalProperties": false,
           "properties": {
@@ -146,6 +253,9 @@
               },
               "title": "Enabled Extensions",
               "type": "array"
+            },
+            "generation": {
+              "$ref": "#/$defs/GenerationParameters"
             },
             "max_requests_per_input": {
               "default": 8,
@@ -303,6 +413,40 @@
       "title": "CreateSession",
       "type": "object"
     },
+    "Deleted": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "deleted": {
+          "const": true,
+          "default": true,
+          "title": "Deleted",
+          "type": "boolean"
+        }
+      },
+      "title": "Deleted",
+      "type": "object"
+    },
+    "DiscoveredModel": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "title": "DiscoveredModel",
+      "type": "object"
+    },
     "ErrorResponse": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
@@ -440,6 +584,231 @@
       "title": "InputView",
       "type": "object"
     },
+    "ManagedModelView": {
+      "$defs": {
+        "GenerationParameters": {
+          "additionalProperties": false,
+          "properties": {
+            "frequency_penalty": {
+              "anyOf": [
+                {
+                  "maximum": 2,
+                  "minimum": -2,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Frequency Penalty"
+            },
+            "max_tokens": {
+              "anyOf": [
+                {
+                  "maximum": 262144,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Max Tokens"
+            },
+            "presence_penalty": {
+              "anyOf": [
+                {
+                  "maximum": 2,
+                  "minimum": -2,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Presence Penalty"
+            },
+            "seed": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Seed"
+            },
+            "stop": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 4,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Stop"
+            },
+            "temperature": {
+              "anyOf": [
+                {
+                  "maximum": 2,
+                  "minimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Temperature"
+            },
+            "top_p": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "maximum": 1,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Top P"
+            }
+          },
+          "title": "GenerationParameters",
+          "type": "object"
+        },
+        "ModelSettings": {
+          "additionalProperties": false,
+          "properties": {
+            "context_window": {
+              "default": 128000,
+              "maximum": 4000000,
+              "minimum": 256,
+              "title": "Context Window",
+              "type": "integer"
+            },
+            "enabled": {
+              "default": true,
+              "title": "Enabled",
+              "type": "boolean"
+            },
+            "max_output_tokens": {
+              "default": 4096,
+              "maximum": 262144,
+              "minimum": 1,
+              "title": "Max Output Tokens",
+              "type": "integer"
+            },
+            "name": {
+              "maxLength": 100,
+              "minLength": 1,
+              "title": "Name",
+              "type": "string"
+            },
+            "parameters": {
+              "$ref": "#/$defs/GenerationParameters"
+            },
+            "provider_id": {
+              "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+              "title": "Provider Id",
+              "type": "string"
+            },
+            "remote_id": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Remote Id",
+              "type": "string"
+            },
+            "supports_images": {
+              "default": false,
+              "title": "Supports Images",
+              "type": "boolean"
+            },
+            "supports_reasoning": {
+              "default": false,
+              "title": "Supports Reasoning",
+              "type": "boolean"
+            },
+            "supports_tools": {
+              "default": true,
+              "title": "Supports Tools",
+              "type": "boolean"
+            },
+            "token_field": {
+              "default": "max_tokens",
+              "enum": [
+                "max_tokens",
+                "max_completion_tokens"
+              ],
+              "title": "Token Field",
+              "type": "string"
+            }
+          },
+          "required": [
+            "provider_id",
+            "name",
+            "remote_id"
+          ],
+          "title": "ModelSettings",
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "available": {
+          "title": "Available",
+          "type": "boolean"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "revision": {
+          "title": "Revision",
+          "type": "integer"
+        },
+        "settings": {
+          "$ref": "#/$defs/ModelSettings"
+        },
+        "unavailable_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Unavailable Reason"
+        }
+      },
+      "required": [
+        "id",
+        "revision",
+        "settings",
+        "available",
+        "unavailable_reason"
+      ],
+      "title": "ManagedModelView",
+      "type": "object"
+    },
     "MessageView": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
@@ -505,6 +874,916 @@
       "title": "MessageView",
       "type": "object"
     },
+    "ModelCatalog": {
+      "$defs": {
+        "GenerationParameters": {
+          "additionalProperties": false,
+          "properties": {
+            "frequency_penalty": {
+              "anyOf": [
+                {
+                  "maximum": 2,
+                  "minimum": -2,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Frequency Penalty"
+            },
+            "max_tokens": {
+              "anyOf": [
+                {
+                  "maximum": 262144,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Max Tokens"
+            },
+            "presence_penalty": {
+              "anyOf": [
+                {
+                  "maximum": 2,
+                  "minimum": -2,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Presence Penalty"
+            },
+            "seed": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Seed"
+            },
+            "stop": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 4,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Stop"
+            },
+            "temperature": {
+              "anyOf": [
+                {
+                  "maximum": 2,
+                  "minimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Temperature"
+            },
+            "top_p": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "maximum": 1,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Top P"
+            }
+          },
+          "title": "GenerationParameters",
+          "type": "object"
+        },
+        "ManagedModelView": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "title": "Available",
+              "type": "boolean"
+            },
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "revision": {
+              "title": "Revision",
+              "type": "integer"
+            },
+            "settings": {
+              "$ref": "#/$defs/ModelSettings"
+            },
+            "unavailable_reason": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Unavailable Reason"
+            }
+          },
+          "required": [
+            "id",
+            "revision",
+            "settings",
+            "available",
+            "unavailable_reason"
+          ],
+          "title": "ManagedModelView",
+          "type": "object"
+        },
+        "ModelSettings": {
+          "additionalProperties": false,
+          "properties": {
+            "context_window": {
+              "default": 128000,
+              "maximum": 4000000,
+              "minimum": 256,
+              "title": "Context Window",
+              "type": "integer"
+            },
+            "enabled": {
+              "default": true,
+              "title": "Enabled",
+              "type": "boolean"
+            },
+            "max_output_tokens": {
+              "default": 4096,
+              "maximum": 262144,
+              "minimum": 1,
+              "title": "Max Output Tokens",
+              "type": "integer"
+            },
+            "name": {
+              "maxLength": 100,
+              "minLength": 1,
+              "title": "Name",
+              "type": "string"
+            },
+            "parameters": {
+              "$ref": "#/$defs/GenerationParameters"
+            },
+            "provider_id": {
+              "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+              "title": "Provider Id",
+              "type": "string"
+            },
+            "remote_id": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Remote Id",
+              "type": "string"
+            },
+            "supports_images": {
+              "default": false,
+              "title": "Supports Images",
+              "type": "boolean"
+            },
+            "supports_reasoning": {
+              "default": false,
+              "title": "Supports Reasoning",
+              "type": "boolean"
+            },
+            "supports_tools": {
+              "default": true,
+              "title": "Supports Tools",
+              "type": "boolean"
+            },
+            "token_field": {
+              "default": "max_tokens",
+              "enum": [
+                "max_tokens",
+                "max_completion_tokens"
+              ],
+              "title": "Token Field",
+              "type": "string"
+            }
+          },
+          "required": [
+            "provider_id",
+            "name",
+            "remote_id"
+          ],
+          "title": "ModelSettings",
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "builtin_models": {
+          "items": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "title": "Builtin Models",
+          "type": "array"
+        },
+        "config_revision": {
+          "title": "Config Revision",
+          "type": "integer"
+        },
+        "default_model_id": {
+          "title": "Default Model Id",
+          "type": "string"
+        },
+        "models": {
+          "items": {
+            "$ref": "#/$defs/ManagedModelView"
+          },
+          "title": "Models",
+          "type": "array"
+        }
+      },
+      "required": [
+        "models",
+        "builtin_models",
+        "default_model_id",
+        "config_revision"
+      ],
+      "title": "ModelCatalog",
+      "type": "object"
+    },
+    "ProviderCatalog": {
+      "$defs": {
+        "ProviderProtocol": {
+          "enum": [
+            "openai",
+            "anthropic"
+          ],
+          "type": "string"
+        },
+        "ProviderSettings": {
+          "additionalProperties": false,
+          "properties": {
+            "auth_mode": {
+              "default": "stored",
+              "enum": [
+                "stored",
+                "env",
+                "none"
+              ],
+              "title": "Auth Mode",
+              "type": "string"
+            },
+            "base_url": {
+              "maxLength": 2048,
+              "minLength": 1,
+              "title": "Base Url",
+              "type": "string"
+            },
+            "enabled": {
+              "default": true,
+              "title": "Enabled",
+              "type": "boolean"
+            },
+            "env_var": {
+              "anyOf": [
+                {
+                  "maxLength": 100,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Env Var"
+            },
+            "name": {
+              "maxLength": 100,
+              "minLength": 1,
+              "title": "Name",
+              "type": "string"
+            },
+            "protocol": {
+              "$ref": "#/$defs/ProviderProtocol",
+              "default": "openai"
+            },
+            "timeout_seconds": {
+              "default": 60,
+              "maximum": 300,
+              "minimum": 5,
+              "title": "Timeout Seconds",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "name",
+            "base_url"
+          ],
+          "title": "ProviderSettings",
+          "type": "object"
+        },
+        "ProviderView": {
+          "additionalProperties": false,
+          "properties": {
+            "credential_source": {
+              "enum": [
+                "stored",
+                "environment",
+                "none"
+              ],
+              "title": "Credential Source",
+              "type": "string"
+            },
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "key_configured": {
+              "title": "Key Configured",
+              "type": "boolean"
+            },
+            "revision": {
+              "title": "Revision",
+              "type": "integer"
+            },
+            "settings": {
+              "$ref": "#/$defs/ProviderSettings"
+            }
+          },
+          "required": [
+            "id",
+            "revision",
+            "settings",
+            "key_configured",
+            "credential_source"
+          ],
+          "title": "ProviderView",
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "providers": {
+          "items": {
+            "$ref": "#/$defs/ProviderView"
+          },
+          "title": "Providers",
+          "type": "array"
+        },
+        "secret_storage": {
+          "enum": [
+            "dpapi",
+            "env_only",
+            "custom"
+          ],
+          "title": "Secret Storage",
+          "type": "string"
+        }
+      },
+      "required": [
+        "providers",
+        "secret_storage"
+      ],
+      "title": "ProviderCatalog",
+      "type": "object"
+    },
+    "ProviderTestResult": {
+      "$defs": {
+        "DiscoveredModel": {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "name": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "name"
+          ],
+          "title": "DiscoveredModel",
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "detail": {
+          "title": "Detail",
+          "type": "string"
+        },
+        "latency_ms": {
+          "title": "Latency Ms",
+          "type": "integer"
+        },
+        "models": {
+          "items": {
+            "$ref": "#/$defs/DiscoveredModel"
+          },
+          "title": "Models",
+          "type": "array"
+        },
+        "ok": {
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "status": {
+          "enum": [
+            "ok",
+            "auth_error",
+            "unavailable",
+            "unsupported",
+            "invalid_response"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ok",
+        "status",
+        "detail",
+        "latency_ms",
+        "models"
+      ],
+      "title": "ProviderTestResult",
+      "type": "object"
+    },
+    "ProviderView": {
+      "$defs": {
+        "ProviderProtocol": {
+          "enum": [
+            "openai",
+            "anthropic"
+          ],
+          "type": "string"
+        },
+        "ProviderSettings": {
+          "additionalProperties": false,
+          "properties": {
+            "auth_mode": {
+              "default": "stored",
+              "enum": [
+                "stored",
+                "env",
+                "none"
+              ],
+              "title": "Auth Mode",
+              "type": "string"
+            },
+            "base_url": {
+              "maxLength": 2048,
+              "minLength": 1,
+              "title": "Base Url",
+              "type": "string"
+            },
+            "enabled": {
+              "default": true,
+              "title": "Enabled",
+              "type": "boolean"
+            },
+            "env_var": {
+              "anyOf": [
+                {
+                  "maxLength": 100,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Env Var"
+            },
+            "name": {
+              "maxLength": 100,
+              "minLength": 1,
+              "title": "Name",
+              "type": "string"
+            },
+            "protocol": {
+              "$ref": "#/$defs/ProviderProtocol",
+              "default": "openai"
+            },
+            "timeout_seconds": {
+              "default": 60,
+              "maximum": 300,
+              "minimum": 5,
+              "title": "Timeout Seconds",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "name",
+            "base_url"
+          ],
+          "title": "ProviderSettings",
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "credential_source": {
+          "enum": [
+            "stored",
+            "environment",
+            "none"
+          ],
+          "title": "Credential Source",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "key_configured": {
+          "title": "Key Configured",
+          "type": "boolean"
+        },
+        "revision": {
+          "title": "Revision",
+          "type": "integer"
+        },
+        "settings": {
+          "$ref": "#/$defs/ProviderSettings"
+        }
+      },
+      "required": [
+        "id",
+        "revision",
+        "settings",
+        "key_configured",
+        "credential_source"
+      ],
+      "title": "ProviderView",
+      "type": "object"
+    },
+    "PutModel": {
+      "$defs": {
+        "GenerationParameters": {
+          "additionalProperties": false,
+          "properties": {
+            "frequency_penalty": {
+              "anyOf": [
+                {
+                  "maximum": 2,
+                  "minimum": -2,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Frequency Penalty"
+            },
+            "max_tokens": {
+              "anyOf": [
+                {
+                  "maximum": 262144,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Max Tokens"
+            },
+            "presence_penalty": {
+              "anyOf": [
+                {
+                  "maximum": 2,
+                  "minimum": -2,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Presence Penalty"
+            },
+            "seed": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Seed"
+            },
+            "stop": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 4,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Stop"
+            },
+            "temperature": {
+              "anyOf": [
+                {
+                  "maximum": 2,
+                  "minimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Temperature"
+            },
+            "top_p": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "maximum": 1,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Top P"
+            }
+          },
+          "title": "GenerationParameters",
+          "type": "object"
+        },
+        "ModelSettings": {
+          "additionalProperties": false,
+          "properties": {
+            "context_window": {
+              "default": 128000,
+              "maximum": 4000000,
+              "minimum": 256,
+              "title": "Context Window",
+              "type": "integer"
+            },
+            "enabled": {
+              "default": true,
+              "title": "Enabled",
+              "type": "boolean"
+            },
+            "max_output_tokens": {
+              "default": 4096,
+              "maximum": 262144,
+              "minimum": 1,
+              "title": "Max Output Tokens",
+              "type": "integer"
+            },
+            "name": {
+              "maxLength": 100,
+              "minLength": 1,
+              "title": "Name",
+              "type": "string"
+            },
+            "parameters": {
+              "$ref": "#/$defs/GenerationParameters"
+            },
+            "provider_id": {
+              "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+              "title": "Provider Id",
+              "type": "string"
+            },
+            "remote_id": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Remote Id",
+              "type": "string"
+            },
+            "supports_images": {
+              "default": false,
+              "title": "Supports Images",
+              "type": "boolean"
+            },
+            "supports_reasoning": {
+              "default": false,
+              "title": "Supports Reasoning",
+              "type": "boolean"
+            },
+            "supports_tools": {
+              "default": true,
+              "title": "Supports Tools",
+              "type": "boolean"
+            },
+            "token_field": {
+              "default": "max_tokens",
+              "enum": [
+                "max_tokens",
+                "max_completion_tokens"
+              ],
+              "title": "Token Field",
+              "type": "string"
+            }
+          },
+          "required": [
+            "provider_id",
+            "name",
+            "remote_id"
+          ],
+          "title": "ModelSettings",
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "expected_revision": {
+          "minimum": 0,
+          "title": "Expected Revision",
+          "type": "integer"
+        },
+        "request_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Request Id",
+          "type": "string"
+        },
+        "settings": {
+          "$ref": "#/$defs/ModelSettings"
+        }
+      },
+      "required": [
+        "request_id",
+        "expected_revision",
+        "settings"
+      ],
+      "title": "PutModel",
+      "type": "object"
+    },
+    "PutProvider": {
+      "$defs": {
+        "ProviderProtocol": {
+          "enum": [
+            "openai",
+            "anthropic"
+          ],
+          "type": "string"
+        },
+        "ProviderSettings": {
+          "additionalProperties": false,
+          "properties": {
+            "auth_mode": {
+              "default": "stored",
+              "enum": [
+                "stored",
+                "env",
+                "none"
+              ],
+              "title": "Auth Mode",
+              "type": "string"
+            },
+            "base_url": {
+              "maxLength": 2048,
+              "minLength": 1,
+              "title": "Base Url",
+              "type": "string"
+            },
+            "enabled": {
+              "default": true,
+              "title": "Enabled",
+              "type": "boolean"
+            },
+            "env_var": {
+              "anyOf": [
+                {
+                  "maxLength": 100,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Env Var"
+            },
+            "name": {
+              "maxLength": 100,
+              "minLength": 1,
+              "title": "Name",
+              "type": "string"
+            },
+            "protocol": {
+              "$ref": "#/$defs/ProviderProtocol",
+              "default": "openai"
+            },
+            "timeout_seconds": {
+              "default": 60,
+              "maximum": 300,
+              "minimum": 5,
+              "title": "Timeout Seconds",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "name",
+            "base_url"
+          ],
+          "title": "ProviderSettings",
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "api_key": {
+          "anyOf": [
+            {
+              "format": "password",
+              "maxLength": 4096,
+              "type": "string",
+              "writeOnly": true
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Api Key"
+        },
+        "expected_revision": {
+          "minimum": 0,
+          "title": "Expected Revision",
+          "type": "integer"
+        },
+        "request_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Request Id",
+          "type": "string"
+        },
+        "secret_action": {
+          "default": "keep",
+          "enum": [
+            "keep",
+            "replace",
+            "clear"
+          ],
+          "title": "Secret Action",
+          "type": "string"
+        },
+        "settings": {
+          "$ref": "#/$defs/ProviderSettings"
+        }
+      },
+      "required": [
+        "request_id",
+        "expected_revision",
+        "settings"
+      ],
+      "title": "PutProvider",
+      "type": "object"
+    },
     "Receipt": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
@@ -552,6 +1831,29 @@
         "status"
       ],
       "title": "Receipt",
+      "type": "object"
+    },
+    "RevisionCommand": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "expected_revision": {
+          "minimum": 0,
+          "title": "Expected Revision",
+          "type": "integer"
+        },
+        "request_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Request Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "request_id",
+        "expected_revision"
+      ],
+      "title": "RevisionCommand",
       "type": "object"
     },
     "SessionSummary": {
@@ -611,6 +1913,29 @@
         "model_id"
       ],
       "title": "SessionSummary",
+      "type": "object"
+    },
+    "SetDefaultModel": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "expected_revision": {
+          "minimum": 0,
+          "title": "Expected Revision",
+          "type": "integer"
+        },
+        "request_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Request Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "request_id",
+        "expected_revision"
+      ],
+      "title": "SetDefaultModel",
       "type": "object"
     },
     "Snapshot": {
@@ -695,6 +2020,113 @@
             "enabled"
           ],
           "title": "ExtensionView",
+          "type": "object"
+        },
+        "GenerationParameters": {
+          "additionalProperties": false,
+          "properties": {
+            "frequency_penalty": {
+              "anyOf": [
+                {
+                  "maximum": 2,
+                  "minimum": -2,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Frequency Penalty"
+            },
+            "max_tokens": {
+              "anyOf": [
+                {
+                  "maximum": 262144,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Max Tokens"
+            },
+            "presence_penalty": {
+              "anyOf": [
+                {
+                  "maximum": 2,
+                  "minimum": -2,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Presence Penalty"
+            },
+            "seed": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Seed"
+            },
+            "stop": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 4,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Stop"
+            },
+            "temperature": {
+              "anyOf": [
+                {
+                  "maximum": 2,
+                  "minimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Temperature"
+            },
+            "top_p": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "maximum": 1,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Top P"
+            }
+          },
+          "title": "GenerationParameters",
           "type": "object"
         },
         "InputView": {
@@ -865,6 +2297,9 @@
               },
               "title": "Enabled Extensions",
               "type": "array"
+            },
+            "generation": {
+              "$ref": "#/$defs/GenerationParameters"
             },
             "max_requests_per_input": {
               "default": 8,
@@ -1121,6 +2556,113 @@
     },
     "UpdateConfig": {
       "$defs": {
+        "GenerationParameters": {
+          "additionalProperties": false,
+          "properties": {
+            "frequency_penalty": {
+              "anyOf": [
+                {
+                  "maximum": 2,
+                  "minimum": -2,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Frequency Penalty"
+            },
+            "max_tokens": {
+              "anyOf": [
+                {
+                  "maximum": 262144,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Max Tokens"
+            },
+            "presence_penalty": {
+              "anyOf": [
+                {
+                  "maximum": 2,
+                  "minimum": -2,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Presence Penalty"
+            },
+            "seed": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Seed"
+            },
+            "stop": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 4,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Stop"
+            },
+            "temperature": {
+              "anyOf": [
+                {
+                  "maximum": 2,
+                  "minimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Temperature"
+            },
+            "top_p": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "maximum": 1,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Top P"
+            }
+          },
+          "title": "GenerationParameters",
+          "type": "object"
+        },
         "SessionSettings": {
           "additionalProperties": false,
           "properties": {
@@ -1147,6 +2689,9 @@
               },
               "title": "Enabled Extensions",
               "type": "array"
+            },
+            "generation": {
+              "$ref": "#/$defs/GenerationParameters"
             },
             "max_requests_per_input": {
               "default": 8,
@@ -1223,6 +2768,113 @@
     },
     "UpdateHostConfig": {
       "$defs": {
+        "GenerationParameters": {
+          "additionalProperties": false,
+          "properties": {
+            "frequency_penalty": {
+              "anyOf": [
+                {
+                  "maximum": 2,
+                  "minimum": -2,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Frequency Penalty"
+            },
+            "max_tokens": {
+              "anyOf": [
+                {
+                  "maximum": 262144,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Max Tokens"
+            },
+            "presence_penalty": {
+              "anyOf": [
+                {
+                  "maximum": 2,
+                  "minimum": -2,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Presence Penalty"
+            },
+            "seed": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Seed"
+            },
+            "stop": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 4,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Stop"
+            },
+            "temperature": {
+              "anyOf": [
+                {
+                  "maximum": 2,
+                  "minimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Temperature"
+            },
+            "top_p": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "maximum": 1,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Top P"
+            }
+          },
+          "title": "GenerationParameters",
+          "type": "object"
+        },
         "HostSettings": {
           "additionalProperties": false,
           "properties": {
@@ -1294,6 +2946,9 @@
               },
               "title": "Enabled Extensions",
               "type": "array"
+            },
+            "generation": {
+              "$ref": "#/$defs/GenerationParameters"
             },
             "max_requests_per_input": {
               "default": 8,

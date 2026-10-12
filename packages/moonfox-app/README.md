@@ -4,7 +4,7 @@ Moonfox 的 headless 会话运行时与可信本地扩展宿主，Python ≥ 3.1
 
 安装不需要 Web 框架、前端、QQ、人设或记忆扩展。应用包依赖两个核心包、Pydantic 和 packaging；这些应用能力没有进入核心。
 
-阶段 D 已增加持久 SessionHub、durable inbox/outbox、配置/身份/审批与计量，以及可选 HTTP/WS server。使用 `create_application` 构造服务，或安装 `moonfox-app[server]` 后运行 CLI。独立 WebUI、启动命令和限制见 [阶段 D 说明](../../docs/moonfox/STAGE-D.md)；以下单会话接口保持兼容。
+阶段 D 已增加持久 SessionHub、durable inbox/outbox、配置/身份/审批与计量，以及可选 HTTP/WS server；基础管理补充提供持久多提供商/模型目录与参数配置。`create_application(home=..., models={})` 可从空目录开始，通过同一 Hub API 管理配置；WebUI/headless/后续 QQ 共用，不在渠道扩展内另配模型。安装 `moonfox-app[server,providers]` 可运行真实 HTTP 协议，普通安装仍无 httpx/Web 依赖。启动与限制见 [阶段 D](../../docs/moonfox/STAGE-D.md) 和 [提供商管理](../../docs/moonfox/PROVIDER-MANAGEMENT.md)。
 
 ## Headless 使用
 
@@ -67,7 +67,7 @@ I/O 失败尝试回滚整个未成功批次；回滚本身失败时 store 标记
 
 `compact()` 是显式操作；可注入 `CompactionPolicy` 或 `SummarizingCompactor(summarize, keep_recent_tokens=...)`。后者自动移动切点以保留工具配对，summary callback 可使用宿主的已计量模型服务。默认不进行任何摘要模型请求。启用 `CompactionSettings(trigger_tokens=..., max_per_run=..., timeout=...)` 后，只在安全请求边界有界调用，不重入 core run；失败、取消、非法切点或没有缩小上下文都不提交摘要。
 
-单会话 `create_headless_app` 不自行跨 run 计费；阶段 D 的 `create_application` 提供共享并发与持久逻辑输入请求/时间/token 预算。压缩工厂收到同一个计量 stream，不应绕过它；没有真实 provider 费用网关或自动重试。
+单会话 `create_headless_app` 不自行跨 run 计费；`create_application` 提供共享并发与持久逻辑输入请求/时间/token 预算。压缩工厂收到同一个计量 stream，不应绕过它；输出参数受预算准入限制，没有金额/汇率硬上限或自动重试。
 
 ## 扩展 SDK 与生命周期
 
@@ -83,6 +83,14 @@ I/O 失败尝试回滚整个未成功批次；回滚本身失败时 store 标记
 
 ## 阶段边界与检查
 
-阶段 D 已实现应用服务与独立 WebUI；仍未实现真实 provider、人设/记忆/QQ 具体业务扩展。Web 框架只通过可选 `server` extra 安装，headless 不需要前端构建或 Web 依赖。
+阶段 D 与管理补充已实现应用服务、独立 WebUI、OpenAI-compatible/Anthropic 协议适配；人设/记忆/QQ 具体业务扩展仍未实现。Web 框架通过可选 `server` extra、httpx 通过 `providers` extra 安装；headless 不需要前端构建或 Web 依赖，也可注入自己的传输。
 
 根 `python scripts/check.py --installation --web` 检查 Ruff、格式、strict mypy、确定性测试、协议导出一致性、三个包 sdist → wheel、五个干净环境安装、仓库外示例与前端测试/构建。`--web` 需先在 packages/web-ui 执行 npm ci；省略则仅检查 Python。当前实际验证环境为 Windows / Python 3.14.8，未单独实测最低 Python 3.12。
+
+## Headless 管理共享目录
+
+公开类型：`ProviderSettings`、`ModelSettings`、`GenerationParameters`、`SecretProtector`；`SessionHub` 的 `providers/put_provider/delete_provider/test_provider`、`managed_models/put_model/delete_model/set_default_model` 均需管理员 `Principal`。创建使用 `expected_revision=0`，更新/删除传读取到的修订号，设默认传全局 config revision；不会静默覆盖并发编辑。
+
+提供商保存名称/协议/API 基础地址/超时/启用和认证方式；密钥通过独立 `secret_action=keep|replace|clear` 与 `api_key` 入参写入。Windows 默认当前用户 DPAPI，其他平台环境变量引用或显式注入 `secret_protector`；环境变量值不复制入库，响应不回显密钥。`provider_transport` 可覆盖默认延迟导入的 httpx 传输。
+
+模型保存远端 ID、能力、上下文/输出限制与生成默认值，会话 `SessionSettings.generation` 再覆盖，null 继承，stop 空元组清空。每次 run 固定提供商/凭据/模型/参数快照；更新在下个 run 生效，停用或凭据失效阻止新请求但保留历史可读。删除被模型/会话/默认配置引用的资源会失败，先显式解除引用。

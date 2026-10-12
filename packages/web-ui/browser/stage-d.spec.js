@@ -44,7 +44,7 @@ async function noHorizontalOverflow(page) {
 test('connection page is explicit about offline demo; keyboard focus and reduced motion work', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: '欢迎回到 Moonfox' })).toBeVisible();
-  await expect(page.getByText('默认示例为离线演示', { exact: true })).toBeVisible();
+  await expect(page.getByText('离线演示为可选模式', { exact: true })).toBeVisible();
   await expect(page.getByLabel('管理员令牌', { exact: true })).toHaveAttribute('type', 'password');
   await page.keyboard.press('Tab');
   await expect(page.locator('.skip-link')).toBeFocused();
@@ -98,7 +98,7 @@ test('configuration catalog controls save full CAS settings; conflict requires e
   await page.getByRole('button', { name: '保存会话配置', exact: true }).click();
   const response = await saved; const dto = requestBody(response.request());
   expect(dto.expected_revision).toBe(0);
-  expect(Object.keys(dto.settings).sort()).toEqual(['allowed_tools', 'approval_tools', 'enabled_extensions', 'max_requests_per_input', 'max_tokens_per_input', 'max_turns_per_run', 'model_id', 'run_timeout_seconds', 'thinking_level']);
+  expect(Object.keys(dto.settings).sort()).toEqual(['allowed_tools', 'approval_tools', 'enabled_extensions', 'generation', 'max_requests_per_input', 'max_tokens_per_input', 'max_turns_per_run', 'model_id', 'run_timeout_seconds', 'thinking_level']);
   expect(dto.settings.approval_tools).toEqual(['echo']);
   await expect(page.locator('.settings-footer')).toContainText('已保存 r1');
   await waitLive(page);

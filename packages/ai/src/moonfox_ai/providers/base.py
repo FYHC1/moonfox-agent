@@ -34,6 +34,11 @@ class StreamOptions:
     headers: dict[str, str] | None = None
     on_payload: Callable[[Any, Model], Any] | None = None
     on_response: Callable[[ProviderResponse, Model], None] | None = None
+    top_p: float | None = None
+    frequency_penalty: float | None = None
+    presence_penalty: float | None = None
+    seed: int | None = None
+    stop: tuple[str, ...] | None = None
 
 
 class StreamFn(Protocol):

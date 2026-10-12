@@ -34,7 +34,7 @@ makeSession('fixture-new', '新思路 · UI 夹具');
 makeSession('fixture-history', '工具与边界 · UI 夹具', 'history');
 makeSession('fixture-qq', 'QQ 来源 · 只读夹具', 'qq');
 const host = { defaults: clone(fixtures.snapshot.settings), max_concurrent_requests: 2, approval_timeout_seconds: 60, event_window: 256, subscriber_buffer: 128, max_pending_inputs: 100 };
-const catalog = () => assertContract('ConfigView', { revision: 0, settings: host, models: [{ id: 'demo', name: 'Demo · 离线演示' }], tools: ['echo'], extensions: [{ id: 'fixture-notes', version: '1.0.0', capabilities: ['test-only'] }] });
+const catalog = () => assertContract('ConfigView', { revision: 0, settings: host, models: [{ id: 'demo', label: 'Demo · 离线演示', provider: 'demo' }], tools: ['echo'], extensions: [{ id: 'fixture-notes', version: '1.0.0', capabilities: ['test-only'] }] });
 function updateItem(list, value) { const at = list.findIndex(item => item.id === value.id); if (at < 0) list.push(clone(value)); else list[at] = clone(value); }
 function project(snapshot, { seq, payload, type }) {
   snapshot.seq = seq;

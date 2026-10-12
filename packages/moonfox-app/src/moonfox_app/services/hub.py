@@ -14,6 +14,7 @@ from typing import Any
 from moonfox_agent.api import RunOptions
 from moonfox_ai.api import StreamFn
 from moonfox_app.config import HostSettings, SessionSettings
+from moonfox_app.config.providers import ModelSettings, ProviderSettings
 from moonfox_app.extension_api import (
     ExtensionManifest,
     InputReceipt,
@@ -29,9 +30,10 @@ from moonfox_app.security import AccessDenied, Principal, authorize_session
 from moonfox_app.security.approvals import Approvals
 
 from .channel import BoundChannelGateway, ChannelBinding
-from .errors import BudgetExceeded, ConflictError
+from .errors import BudgetExceeded, ConflictError, InvalidConfiguration
 from .events import EventBus, Subscription
 from .gateway import ModelGateway
+from .model_catalog import ModelCatalog
 from .readmodel import session_update, view_messages
 from .session_factory import RunPorts
 from .store import HostStore
@@ -51,6 +53,7 @@ class _LiveSession:
     runtime: SessionRuntime
     ports: RunPorts
     revision: int
+    model_revision: str = "builtin"
 
 
 class SessionHub:
@@ -65,9 +68,9 @@ class SessionHub:
         extensions: Sequence[ExtensionManifest] = (),
         validate_extensions: Callable[[tuple[str, ...]], None] | None = None,
         compact_enabled: bool = False,
+        model_catalog: ModelCatalog | None = None,
     ) -> None:
-        if not models:
-            raise ValueError("At least one explicitly registered model is required")
+        self._catalog = model_catalog or ModelCatalog(store, models)
         self._store = store
         self._models = dict(models)
         self._factory = runtime_factory
@@ -77,7 +80,7 @@ class SessionHub:
         self._validate_extensions = validate_extensions
         self._compact_enabled = compact_enabled
         _, self._startup_settings = store.config()
-        self._validate_settings(self._startup_settings.defaults)
+        self._validate_settings(self._startup_settings.defaults, available=False)
         self.events = EventBus(
             window=self._startup_settings.event_window,
             capacity=self._startup_settings.subscriber_buffer,
@@ -99,10 +102,9 @@ class SessionHub:
         self._lives: dict[str, _LiveSession] = {}
         self._channels: list[BoundChannelGateway] = []
 
-    def _validate_settings(self, settings: SessionSettings) -> None:
+    def _validate_settings(self, settings: SessionSettings, *, available: bool = True) -> None:
         SessionSettings.model_validate_json(settings.model_dump_json())
-        if settings.model_id not in self._models:
-            raise ValueError("Model is not registered with this host")
+        self._catalog.validate_session(settings, available=available)
         if not set(settings.allowed_tools) <= set(self._tools):
             raise ValueError("Tools must be registered and authorized by the host")
         enabled = set(settings.enabled_extensions)
@@ -204,6 +206,7 @@ class SessionHub:
         self._text(title, "title", 120)
         self._text(request_id, "request_id", 128)
         settings = self._store.config()[1].defaults
+        self._validate_settings(settings)
         session = self._store.create_session(
             owner_id=principal.id,
             domain="agent",
@@ -410,10 +413,7 @@ class SessionHub:
         return {
             "revision": revision,
             "settings": settings.model_dump(mode="json"),
-            "models": [
-                {"id": identity, "label": model.label, "provider": model.model.provider}
-                for identity, model in self._models.items()
-            ],
+            "models": self._catalog.choices(),
             "tools": list(self._tools),
             "extensions": [
                 {
@@ -433,6 +433,81 @@ class SessionHub:
         HostSettings.model_validate_json(settings.model_dump_json())
         self._validate_settings(settings.defaults)
         self._store.update_config(settings, expected_revision)
+        return await self.config(principal)
+
+    def _admin(self, principal: Principal) -> None:
+        self._require_started()
+        if not principal.is_admin:
+            raise AccessDenied("Administrator access required")
+
+    async def providers(self, principal: Principal) -> dict[str, Any]:
+        self._admin(principal)
+        return self._catalog.providers()
+
+    async def put_provider(
+        self,
+        principal: Principal,
+        identity: str,
+        *,
+        settings: ProviderSettings,
+        expected_revision: int,
+        secret_action: str = "keep",
+        api_key: str | None = None,
+    ) -> dict[str, Any]:
+        self._admin(principal)
+        return self._catalog.put_provider(
+            identity,
+            settings,
+            expected_revision=expected_revision,
+            secret_action=secret_action,
+            api_key=api_key,
+        )
+
+    async def delete_provider(
+        self, principal: Principal, identity: str, *, expected_revision: int
+    ) -> dict[str, Any]:
+        self._admin(principal)
+        self._catalog.delete_provider(identity, expected_revision)
+        return {"deleted": True}
+
+    async def test_provider(
+        self, principal: Principal, identity: str, *, expected_revision: int
+    ) -> dict[str, Any]:
+        self._admin(principal)
+        return await self._catalog.test_provider(identity, expected_revision)
+
+    async def managed_models(self, principal: Principal) -> dict[str, Any]:
+        self._admin(principal)
+        return self._catalog.models()
+
+    async def put_model(
+        self,
+        principal: Principal,
+        identity: str,
+        *,
+        settings: ModelSettings,
+        expected_revision: int,
+    ) -> dict[str, Any]:
+        self._admin(principal)
+        return self._catalog.put_model(identity, settings, expected_revision)
+
+    async def delete_model(
+        self, principal: Principal, identity: str, *, expected_revision: int
+    ) -> dict[str, Any]:
+        self._admin(principal)
+        self._catalog.delete_model(identity, expected_revision)
+        return {"deleted": True}
+
+    async def set_default_model(
+        self, principal: Principal, identity: str, *, expected_revision: int
+    ) -> dict[str, Any]:
+        self._admin(principal)
+        revision, host = self._store.config()
+        if revision != expected_revision:
+            raise ConflictError("Configuration revision changed")
+        defaults = host.defaults.model_copy(update={"model_id": identity})
+        self._validate_settings(defaults)
+        self._store.update_config(host.model_copy(update={"defaults": defaults}), revision)
         return await self.config(principal)
 
     async def resolve_approval(
@@ -475,6 +550,7 @@ class SessionHub:
         self._require_started()
         if target not in binding.targets:
             raise AccessDenied("Channel target is not authorized")
+        self._validate_settings(self._store.config()[1].defaults)
         route = hashlib.sha256(
             json.dumps([binding.connection_id, binding.bot_account, target]).encode()
         ).hexdigest()
@@ -502,10 +578,16 @@ class SessionHub:
         )
 
     async def _runtime(
-        self, session: SessionRecord, stream: StreamFn, permission: PermissionChecker
+        self,
+        session: SessionRecord,
+        stream: StreamFn,
+        permission: PermissionChecker,
+        source: ModelRegistration,
     ) -> SessionRuntime:
         live = self._lives.get(session.id)
-        if live is not None and live.revision != session.config_revision:
+        if live is not None and (
+            live.revision != session.config_revision or live.model_revision != source.revision
+        ):
             await live.runtime.aclose()
             self._lives.pop(session.id)
             live = None
@@ -513,8 +595,8 @@ class SessionHub:
         if live is None:
             ports = RunPorts()
             ports.bind(stream, permission)
-            runtime = await self._factory(session, ports.stream, ports.permission)
-            live = _LiveSession(runtime, ports, session.config_revision)
+            runtime = await self._factory(session, ports.stream, ports.permission, source)
+            live = _LiveSession(runtime, ports, session.config_revision, source.revision)
             self._lives[session.id] = live
         else:
             live.ports.bind(stream, permission)
@@ -575,9 +657,12 @@ class SessionHub:
             if remaining_ms <= 0 or remaining_requests <= 0:
                 raise BudgetExceeded("Logical input budget exhausted")
             async with asyncio.timeout(remaining_ms / 1000):
-                source = self._models[settings.model_id]
+                source = self._catalog.resolve(settings)
                 runtime = await self._runtime(
-                    session, self._gateway.bind(item.logical_id, source.stream_fn), permission
+                    session,
+                    self._gateway.bind(item.logical_id, source.stream_fn, defaults=source.options),
+                    permission,
+                    source,
                 )
                 actor.runtime = runtime
                 handle = runtime.subscribe(on_event)
@@ -595,6 +680,8 @@ class SessionHub:
                         else await runtime.continue_(options=options)
                     )
                     status = outcome.reason
+        except InvalidConfiguration:
+            status, error = "error", "提供商或模型配置不可用，请检查启用状态、凭据与生成参数。"
         except BudgetExceeded:
             status, error = "limit_reached", "Logical input budget exhausted"
         except TimeoutError:

@@ -4,6 +4,7 @@ import { pendingSubmission, createDraft, lastInput, resumableInput, submissionFa
 import { ProtocolError } from './protocol.js';
 import { ConversationView, emptyConversation, approvalCard } from './conversation.js';
 import { overviewPanel, settingsPanel } from './inspector.js';
+import { ProviderManager } from './provider-manager.js';
 
 export class Workspace {
   constructor({ api, identity, sessions, onDisconnect }) {
@@ -76,6 +77,7 @@ export class Workspace {
       el('div', { class: 'session-section-heading' }, el('div', {}, '会话', this.sessionCount), this.listRefresh),
       this.listNotice, this.sessionList,
       el('div', { class: 'sidebar-footer' },
+        this.identity.is_admin && button('提供商与模型', { icon: 'cube', variant: 'ghost', className: 'provider-manager-entry', onClick: () => this.openProviderManager() }),
         el('div', { class: 'local-note' }, icon('shield', 16), el('div', {}, el('strong', {}, '你的空间，你的边界'), el('span', {}, '关闭页面不停止服务端任务'))),
         el('div', { class: 'connection-tile' }, el('span', { class: 'identity-avatar' }, this.identity.is_admin ? '管' : '我'),
           el('div', { class: 'identity-copy' }, el('strong', {}, this.identity.is_admin ? '管理员连接' : '已认证连接'), el('span', { title: this.api.origin }, new URL(this.api.origin).host)),
@@ -462,12 +464,29 @@ export class Workspace {
     this.inspectorBody.scrollTop = scroll;
   }
 
+  openProviderManager() {
+    if (!this.identity.is_admin || this.disposed || this.providerManager) return;
+    this.providerManager = new ProviderManager({ api: this.api,
+      onChanged: () => this.loadCatalog(),
+      onClose: () => { this.providerManager = null; void this.loadCatalog(); },
+      onUnauthorized: (error) => this.handleUnauthorized(error),
+    });
+    this.providerManager.open();
+  }
+
   async loadCatalog() {
-    if (!this.identity.is_admin || this.catalogLoading || this.disposed) return;
+    if (!this.identity.is_admin || this.disposed) return;
+    if (this.catalogLoading) { this.catalogRefreshQueued = true; return; }
+    this.catalogRefreshQueued = false;
     this.catalogLoading = true; this.catalogError = null; this.renderInspector();
     try { const catalog = await this.api.catalog(this.abort.signal); if (!this.disposed) this.catalog = catalog; }
     catch (error) { if (!this.disposed && !this.handleUnauthorized(error)) this.catalogError = error.message; }
-    finally { if (!this.disposed) { this.catalogLoading = false; this.renderInspector(); } }
+    finally {
+      if (!this.disposed) {
+        this.catalogLoading = false; this.renderInspector();
+        if (this.catalogRefreshQueued) void this.loadCatalog();
+      }
+    }
   }
 
   async saveSettings() {
@@ -595,6 +614,7 @@ export class Workspace {
     if (this.disposed) return;
     this.disposed = true; ++this.selection; ++this.listGeneration;
     this.abort.abort(); this.stream.dispose(); clearTimeout(this.approvalExpiryTimer);
+    this.providerManager?.dispose(); this.providerManager = null;
     this.api.clearCredentials(); this.composers.clear(); this.drafts.clear();
     document.querySelectorAll('dialog').forEach((dialog) => { dialog.close(); dialog.remove(); });
   }

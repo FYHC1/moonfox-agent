@@ -3,6 +3,7 @@
 from typing import Any, Protocol
 
 from moonfox_app.config import HostSettings, SessionSettings
+from moonfox_app.config.providers import ModelSettings, ProviderSettings
 from moonfox_app.security.identity import Principal
 
 
@@ -69,3 +70,43 @@ class ServerHub(Protocol):
     ) -> Subscription:
         """Authorize and register atomically, raising ResyncRequired for an invalid cursor."""
         ...
+
+    async def providers(self, principal: Principal) -> dict[str, Any]: ...
+
+    async def put_provider(
+        self,
+        principal: Principal,
+        identity: str,
+        *,
+        settings: ProviderSettings,
+        expected_revision: int,
+        secret_action: str = "keep",
+        api_key: str | None = None,
+    ) -> dict[str, Any]: ...
+
+    async def delete_provider(
+        self, principal: Principal, identity: str, *, expected_revision: int
+    ) -> dict[str, Any]: ...
+
+    async def test_provider(
+        self, principal: Principal, identity: str, *, expected_revision: int
+    ) -> dict[str, Any]: ...
+
+    async def managed_models(self, principal: Principal) -> dict[str, Any]: ...
+
+    async def put_model(
+        self,
+        principal: Principal,
+        identity: str,
+        *,
+        settings: ModelSettings,
+        expected_revision: int,
+    ) -> dict[str, Any]: ...
+
+    async def delete_model(
+        self, principal: Principal, identity: str, *, expected_revision: int
+    ) -> dict[str, Any]: ...
+
+    async def set_default_model(
+        self, principal: Principal, identity: str, *, expected_revision: int
+    ) -> dict[str, Any]: ...

@@ -55,7 +55,7 @@ from pathlib import Path
 from moonfox_ai.api import Context, FauxProvider, FauxResponse, Model, normalize_context
 import moonfox_ai.api
 assert Path(moonfox_ai.api.__file__).resolve().is_relative_to(Path(sys.prefix).resolve())
-for module in ('moonfox_agent', 'moonfox_app', 'pydantic', 'fastapi', 'uvicorn'):
+for module in ('moonfox_agent', 'moonfox_app', 'pydantic', 'fastapi', 'uvicorn', 'httpx'):
     assert importlib.util.find_spec(module) is None, module
 async def main():
     faux = FauxProvider([FauxResponse.text('standalone')])
@@ -181,9 +181,10 @@ def test_wheels_and_source_installs_work_outside_workspace(tmp_path):
                     "packaging",
                     "pydantic",
                 ]
-                assert set(metadata.get_all("Provides-Extra", [])) == {"server"}
+                assert set(metadata.get_all("Provides-Extra", [])) == {"server", "providers"}
                 assert sorted(req.split("<")[0] for req in requirements if "extra ==" in req) == [
                     "fastapi",
+                    "httpx",
                     "uvicorn",
                     "websockets",
                 ]
@@ -200,7 +201,7 @@ def test_wheels_and_source_installs_work_outside_workspace(tmp_path):
             artifacts,
             "--find-links",
             artifacts,
-            "moonfox-app[server]==0.1.0",
+            "moonfox-app[server,providers]==0.1.0",
             "hatchling>=1.26,<2",
             "httpx>=0.28,<1",
         ],
@@ -289,7 +290,7 @@ def test_wheels_and_source_installs_work_outside_workspace(tmp_path):
 
     server_python = make_environment(tmp_path / "server-extra")
     run(
-        [server_python, "-I", "-m", "pip", "install", "moonfox-app[server]==0.1.0", "httpx"],
+        [server_python, "-I", "-m", "pip", "install", "moonfox-app[server,providers]==0.1.0"],
         cwd=outside,
         env=env,
     )

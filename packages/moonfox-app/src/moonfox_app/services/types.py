@@ -1,11 +1,11 @@
 """Internal application facts, separate from HTTP wire schemas."""
 
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol
 
 from moonfox_agent.api import AgentTool, RunOptions, RunOutcome
-from moonfox_ai.api import Model, StreamFn
+from moonfox_ai.api import Model, StreamFn, StreamOptions
 from moonfox_app.config import SessionSettings
 from moonfox_app.extension_api import (
     EventHandler,
@@ -64,6 +64,9 @@ class ModelRegistration:
     model: Model
     stream_fn: StreamFn
     label: str
+    options: StreamOptions = field(default_factory=StreamOptions, repr=False)
+    revision: str = "builtin"
+    supports_tools: bool = True
 
 
 class SessionRuntime(Protocol):
@@ -88,7 +91,7 @@ class SessionRuntime(Protocol):
 
 
 type RuntimeFactory = Callable[
-    [SessionRecord, StreamFn, PermissionChecker], Awaitable[SessionRuntime]
+    [SessionRecord, StreamFn, PermissionChecker, ModelRegistration], Awaitable[SessionRuntime]
 ]
 type ToolCatalog = dict[str, AgentTool]
 type Data = dict[str, Any]
