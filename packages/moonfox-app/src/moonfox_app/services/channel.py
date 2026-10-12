@@ -103,11 +103,13 @@ class BoundChannelGateway:
     ) -> RegistrationHandle:
         if self._closed or self._listener is not None:
             raise RuntimeError("Channel already has a reply transport or is closed")
-        self._listener = listener
-        # Restore routing for previously received conversations, not only new submissions.
+        # Publish the registration only after routing succeeds, so failure is retryable.
+        sessions = dict(self._sessions)
         for target in self._binding.targets:
             record = self._router.channel_session(self._binding, target)
-            self._sessions[record.id] = target
+            sessions[record.id] = target
+        self._sessions = sessions
+        self._listener = listener
         self.wake()
 
         def remove() -> None:

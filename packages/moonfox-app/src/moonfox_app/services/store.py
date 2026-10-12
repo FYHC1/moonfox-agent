@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import sys
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, cast
@@ -171,6 +171,7 @@ class HostStore:
         request_id: str,
         settings: SessionSettings,
         route_key: str | None = None,
+        validate_new: Callable[[SessionSettings], None] | None = None,
     ) -> SessionRecord:
         existing = self._db.execute(
             "SELECT * FROM sessions WHERE owner_id=? AND domain=? AND request_id=?",
@@ -192,6 +193,10 @@ class HostStore:
                 if existing["owner_id"] != owner_id:
                     raise ConflictError("Route is already owned by another principal")
                 return self._session(existing)
+        # Existing bindings and idempotent retries do not adopt today's defaults.
+        # Validate only before the first insert, without yielding between lookup and write.
+        if validate_new is not None:
+            validate_new(settings)
         identity, scope, timestamp = uuid4().hex, uuid4().hex, now_ms()
         self._db.execute(
             "INSERT INTO sessions VALUES(?,?,?,?,?,?,?,?,?,?,?)",

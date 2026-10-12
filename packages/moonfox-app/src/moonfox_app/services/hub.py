@@ -206,13 +206,13 @@ class SessionHub:
         self._text(title, "title", 120)
         self._text(request_id, "request_id", 128)
         settings = self._store.config()[1].defaults
-        self._validate_settings(settings)
         session = self._store.create_session(
             owner_id=principal.id,
             domain="agent",
             title=title,
             request_id=request_id,
             settings=settings,
+            validate_new=self._validate_settings,
         )
         if session.id not in self._views:
             self._views[session.id] = self._load_view(session)
@@ -550,7 +550,6 @@ class SessionHub:
         self._require_started()
         if target not in binding.targets:
             raise AccessDenied("Channel target is not authorized")
-        self._validate_settings(self._store.config()[1].defaults)
         route = hashlib.sha256(
             json.dumps([binding.connection_id, binding.bot_account, target]).encode()
         ).hexdigest()
@@ -561,6 +560,7 @@ class SessionHub:
             request_id=f"channel:{route}",
             settings=self._store.config()[1].defaults,
             route_key=route,
+            validate_new=self._validate_settings,
         )
         if record.id not in self._views:
             self._views[record.id] = self._load_view(record)
