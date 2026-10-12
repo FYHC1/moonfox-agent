@@ -10,6 +10,59 @@ const sessions = new Map(), subscribers = new Map(), buffers = new Map(), idempo
 let failure = null, configConflict = false;
 const clone = structuredClone;
 const origins = ['http://127.0.0.1:5173', 'http://localhost:5173'];
+const personaDefaults = {
+  version: 1, profile_id: 'moonfox', revision: 1, name: '月狐',
+  identity: '你是月狐（Moonfox），一位温和、好奇且可靠的虚构伙伴。',
+  style: '用自然、简洁的中文交流，留意对方的感受；不要为了人设而夸大事实。',
+  honesty_mode: 'roleplay', examples: [],
+};
+const memoryDefaults = { version: 1, recall: true, max_results: 6, max_reference_tokens: 800, extraction: 'off', extraction_max_tokens: 512 };
+const personaSchema = {
+  type: 'object', additionalProperties: false, properties: {
+    version: { const: 1, default: 1 },
+    profile_id: { type: 'string', pattern: '^[a-z][a-z0-9_-]*$', maxLength: 80, default: 'moonfox' },
+    revision: { type: 'integer', minimum: 1, maximum: 2147483647, default: 1 },
+    name: { type: 'string', minLength: 1, maxLength: 80, default: '月狐' },
+    identity: { type: 'string', minLength: 1, maxLength: 4000, default: personaDefaults.identity },
+    style: { type: 'string', minLength: 1, maxLength: 4000, default: personaDefaults.style },
+    honesty_mode: { type: 'string', enum: ['roleplay', 'honest', 'deflect'], default: 'roleplay' },
+    examples: { type: 'array', maxItems: 8, default: [], items: { type: 'object', additionalProperties: false,
+      properties: { user: { type: 'string', minLength: 1, maxLength: 1000 }, assistant: { type: 'string', minLength: 1, maxLength: 1000 } }, required: ['user', 'assistant'] } },
+  },
+};
+const memorySchema = {
+  type: 'object', additionalProperties: false, properties: {
+    version: { const: 1, default: 1 }, recall: { type: 'boolean', default: true },
+    max_results: { type: 'integer', minimum: 1, maximum: 20, default: 6 },
+    max_reference_tokens: { type: 'integer', minimum: 64, maximum: 4096, default: 800 },
+    extraction: { type: 'string', enum: ['off', 'model'], default: 'off' },
+    extraction_max_tokens: { type: 'integer', minimum: 128, maximum: 2048, default: 512 },
+  },
+};
+let installedExtensions = new Set(['persona', 'memory']);
+let memoryDelayMs = 0, memoryConflict = false;
+const memoryStores = new Map();
+const memoryCommands = ['list', 'get', 'remember', 'update', 'forget', 'delete', 'clear', 'jobs'];
+function extensionMetadata(id, enabled = true) {
+  const persona = id === 'persona';
+  return {
+    id, version: '1.0.0', scope: 'session', enabled, capabilities: [],
+    config_schema: persona ? personaSchema : memorySchema,
+    default_config_json: JSON.stringify(persona ? personaDefaults : memoryDefaults),
+    commands: persona ? [] : memoryCommands, tools: [],
+  };
+}
+function sessionExtensions(enabledIds = []) {
+  return [
+    { id: 'fixture-notes', version: '1.0.0', scope: 'session', enabled: false, capabilities: ['test-only'] },
+    ...[...installedExtensions].map((id) => extensionMetadata(id, enabledIds.includes(id))),
+  ];
+}
+function memoryStore(id) {
+  if (!memoryStores.has(id)) memoryStores.set(id, { revision: 0, records: [] });
+  return memoryStores.get(id);
+}
+
 function makeSession(id, title, mode = 'empty') {
   const snapshot = clone(fixtures.snapshot);
   snapshot.session_id = snapshot.session.id = id;
@@ -17,7 +70,9 @@ function makeSession(id, title, mode = 'empty') {
   snapshot.session.created_at = snapshot.session.updated_at = Date.now();
   snapshot.capabilities = ['prompt', 'cancel', 'continue', 'configure', 'approve'];
   snapshot.settings.allowed_tools = ['echo']; snapshot.settings.approval_tools = ['echo'];
-  snapshot.extensions = [{ id: 'fixture-notes', version: '1.0.0', scope: 'session', enabled: false, capabilities: ['test-only'] }];
+  snapshot.settings.extension_config ??= [];
+  if (!snapshot.settings.extension_config.some((entry) => entry.extension_id === 'fixture-hidden')) snapshot.settings.extension_config.push({ extension_id: 'fixture-hidden', config_json: '{"opaque":"retain"}' });
+  snapshot.extensions = sessionExtensions(snapshot.settings.enabled_extensions ?? []);
   if (mode === 'history') {
     snapshot.messages = [
       { ...clone(fixtures.events[1].payload.message), text: '【UI 夹具】历史输入', id: `${id}-user` },
@@ -34,7 +89,7 @@ makeSession('fixture-new', '新思路 · UI 夹具');
 makeSession('fixture-history', '工具与边界 · UI 夹具', 'history');
 makeSession('fixture-qq', 'QQ 来源 · 只读夹具', 'qq');
 const host = { defaults: clone(fixtures.snapshot.settings), max_concurrent_requests: 2, approval_timeout_seconds: 60, event_window: 256, subscriber_buffer: 128, max_pending_inputs: 100 };
-const catalog = () => assertContract('ConfigView', { revision: 0, settings: host, models: [{ id: 'demo', label: 'Demo · 离线演示', provider: 'demo' }], tools: ['echo'], extensions: [{ id: 'fixture-notes', version: '1.0.0', capabilities: ['test-only'] }] });
+const catalog = () => assertContract('ConfigView', { revision: 0, settings: host, models: [{ id: 'demo', label: 'Demo · 离线演示', provider: 'demo' }], tools: ['echo'], extensions: [{ id: 'fixture-notes', version: '1.0.0', scope: 'session', enabled: false, capabilities: ['test-only'] }, ...[...installedExtensions].map((id) => extensionMetadata(id, true))] });
 function updateItem(list, value) { const at = list.findIndex(item => item.id === value.id); if (at < 0) list.push(clone(value)); else list[at] = clone(value); }
 function project(snapshot, { seq, payload, type }) {
   snapshot.seq = seq;
@@ -79,7 +134,7 @@ const server = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Headers', 'Authorization,Content-Type');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,OPTIONS');
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
-  const send = (value, status = 200, schema) => { if (schema) assertContract(schema, value); res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(value)); };
+  const send = (value, status = 200, schema) => { if (res.destroyed || res.writableEnded) return; if (schema) assertContract(schema, value); res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(value)); };
   try {
     let body = ''; for await (const chunk of req) { body += chunk; if (body.length > 131072) throw Error('fixture body too large'); }
     body = body ? JSON.parse(body) : null;
@@ -87,6 +142,13 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/test/health') return send({ status: 'fixture-only' });
     if (url.pathname === '/test/fail') { failure = body; return send({ ok: true }); }
     if (url.pathname === '/test/conflict') { configConflict = true; return send({ ok: true }); }
+    if (url.pathname === '/test/extensions') {
+      installedExtensions = new Set((Array.isArray(body?.installed) ? body.installed : []).filter((id) => ['persona', 'memory'].includes(id)));
+      for (const snapshot of sessions.values()) snapshot.extensions = sessionExtensions(snapshot.settings.enabled_extensions ?? []);
+      return send({ installed: [...installedExtensions] });
+    }
+    if (url.pathname === '/test/memory-delay') { memoryDelayMs = Math.max(0, Math.min(5000, Number(body?.milliseconds) || 0)); return send({ ok: true }); }
+    if (url.pathname === '/test/memory-conflict') { memoryConflict = true; return send({ ok: true }); }
     if (url.pathname === '/test/approval') {
       const id = body.id; const s = sessions.get(id);
       const approval = { id: randomUUID(), session_id: id, input_id: s.inputs.at(-1)?.id ?? 'fixture-input', tool_name: 'echo', arguments: { text: '<img src=x onerror=alert(1)>\n【UI 夹具】' }, status: 'pending', expires_at: Date.now() + (body.expires ?? 60000) };
@@ -117,6 +179,60 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/v1/sessions' && req.method === 'POST') { assertContract('CreateSession', body); const s = makeSession(randomUUID(), body.title); return send(s.session, 201, 'SessionSummary'); }
     if (!snapshot) return send({ error: 'not-found', detail: 'fixture missing' }, 404);
     if (parts.length === 4 && req.method === 'GET') return send(snapshot, 200, 'Snapshot');
+    if (parts[4] === 'extensions' && parts[5] === 'memory' && parts[6] === 'commands' && req.method === 'POST') {
+      assertContract('ExtensionCommand', body);
+      if (!installedExtensions.has('memory')) return send({ error: 'not-found', detail: 'memory extension is not installed' }, 404);
+      const command = parts[7];
+      if (!memoryCommands.includes(command)) return send({ error: 'not-found', detail: 'unknown fixture command' }, 404);
+      if (memoryConflict) { memoryConflict = false; return send({ error: 'conflict', detail: 'fixture memory revision conflict' }, 409); }
+      if (body.expected_revision !== snapshot.config_revision) return send({ error: 'conflict', detail: 'fixture config revision conflict' }, 409);
+      let args;
+      try { args = JSON.parse(body.arguments_json); } catch { return send({ error: 'invalid', detail: 'invalid fixture arguments' }, 422); }
+      if (command === 'list' && memoryDelayMs) { const delay = memoryDelayMs; memoryDelayMs = 0; await new Promise(resolve => setTimeout(resolve, delay)); if (res.destroyed) return; }
+      const store = memoryStore(id);
+      let result;
+      if (command === 'list') {
+        if (typeof args.query !== 'string' || !Number.isInteger(args.limit) || args.limit < 1 || args.limit > 100 || typeof args.include_forgotten !== 'boolean') return send({ error: 'invalid', detail: 'invalid list arguments' }, 422);
+        const query = args.query.trim().toLocaleLowerCase();
+        const records = store.records.filter(record => (args.include_forgotten || record.active)
+          && (!query || `${record.text} ${record.subject} ${record.kind}`.toLocaleLowerCase().includes(query))).slice(0, args.limit);
+        result = { records: clone(records), revision: store.revision };
+      } else if (command === 'jobs') result = { jobs: [{ id: `fixture-job-${id}`, status: 'done' }] };
+      else if (command === 'get') {
+        const record = store.records.find(item => item.id === args.id);
+        if (!record) return send({ error: 'not-found', detail: 'memory record missing' }, 404);
+        result = { record: clone(record) };
+      } else if (command === 'remember') {
+        if (typeof args.text !== 'string' || !args.text.trim() || args.text.length > 2000 || !['fact', 'preference', 'profile'].includes(args.kind) || typeof args.subject !== 'string' || !args.subject.trim() || args.subject.length > 128) return send({ error: 'invalid', detail: 'invalid remember arguments' }, 422);
+        let record = store.records.find(item => item.text === args.text.trim() && item.kind === args.kind && item.subject === args.subject.trim());
+        if (!record) {
+          const now = Date.now();
+          record = { id: randomUUID(), revision: 1, text: args.text.trim(), kind: args.kind, subject: args.subject.trim(), source: { origin: 'manual', entry_id: null }, confidence: 1, active: true, created_at: now, updated_at: now };
+          store.records.push(record); store.revision++;
+        }
+        result = { record: clone(record) };
+      } else if (command === 'update' || command === 'forget' || command === 'delete') {
+        const record = store.records.find(item => item.id === args.id);
+        if (!record) return send({ error: 'not-found', detail: 'memory record missing' }, 404);
+        if (args.expected_revision !== record.revision) return send({ error: 'conflict', detail: 'memory record revision conflict' }, 409);
+        if (command === 'update') {
+          if (typeof args.text !== 'string' || !args.text.trim() || args.text.length > 2000 || !['fact', 'preference', 'profile'].includes(args.kind) || typeof args.subject !== 'string' || !args.subject.trim() || args.subject.length > 128) return send({ error: 'invalid', detail: 'invalid update arguments' }, 422);
+          record.text = args.text.trim(); record.kind = args.kind; record.subject = args.subject.trim();
+          record.revision++; record.updated_at = Date.now(); store.revision++; result = { record: clone(record) };
+        } else if (command === 'forget') {
+          if (record.active) { record.active = false; record.revision++; record.updated_at = Date.now(); store.revision++; }
+          result = { record: clone(record) };
+        } else {
+          store.records.splice(store.records.indexOf(record), 1); store.revision++;
+          result = { deleted: true, notice: '已清除 memory 扩展副本；原始聊天和工具历史未更改。' };
+        }
+      } else if (command === 'clear') {
+        if (args.expected_revision !== store.revision) return send({ error: 'conflict', detail: 'memory scope revision conflict' }, 409);
+        store.records = []; store.revision++;
+        result = { deleted: true, notice: '已清除 memory 扩展副本；原始聊天和工具历史未更改。' };
+      } else return send({ error: 'not-found', detail: 'unknown fixture command' }, 404);
+      return send({ request_id: body.request_id, result_json: JSON.stringify(result) }, 200, 'ExtensionCommandResult');
+    }
     if (parts[4] === 'inputs') {
       assertContract('SubmitInput', body); const key = `${id}:${body.idempotency_key}`;
       if (idempotency.has(key)) return send(idempotency.get(key), 202, 'Receipt');

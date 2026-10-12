@@ -43,6 +43,8 @@ from .schema import (
     ConfigView,
     ControlCommand,
     CreateSession,
+    ExtensionCommand,
+    ExtensionCommandResult,
     Receipt,
     SessionSummary,
     Snapshot,
@@ -188,6 +190,23 @@ def create_server(
             principal(request), session_id, approval_id, decision=command.decision
         )
         return dto_response(ApprovalView, value)
+
+    @app.post("/api/v1/sessions/{session_id}/extensions/{extension_id}/commands/{command_name}")
+    async def extension_command(
+        request: Request, session_id: str, extension_id: str, command_name: str
+    ) -> JSONResponse:
+        identity = principal(request, admin=True)
+        command = await request_model(request, ExtensionCommand)
+        value = await hub.extension_command(
+            identity,
+            session_id,
+            extension_id,
+            command=command_name,
+            arguments_json=command.arguments_json,
+            expected_revision=command.expected_revision,
+            request_id=command.request_id,
+        )
+        return dto_response(ExtensionCommandResult, value)
 
     @app.get("/api/v1/protocol")
     async def protocol(request: Request) -> dict[str, Any]:

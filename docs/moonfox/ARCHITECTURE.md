@@ -1,6 +1,6 @@
 # Moonfox 整体架构：独立核心 + 业务应用 + 显示层
 
-> 当前已确认的架构基线：**两个独立核心包 + 一个业务应用包 + 一个显示包，具体能力通过扩展实现。** 阶段 A–D 已实现；实际进展与验证以 [HANDOFF.md](HANDOFF.md) 为准。
+> 当前已确认的架构基线：**两个独立核心包 + 一个业务应用包 + 一个显示包，具体能力通过扩展实现。** 阶段 A–E 已实现，QQ 属于 F；实际进展与验证以 [HANDOFF.md](HANDOFF.md) 为准。
 > 继承 [mini-pi 设计](../mini-pi/DESIGN.md) 的分层与契约，但不把其中的示例代码视为已经验证的实现。
 > 接口细节见 [DESIGN.md](DESIGN.md)。[历史草案](history/DESIGN-v1.md) 仅记录早期讨论，不再作为实施依据。
 
@@ -228,12 +228,14 @@ moonfox-agent/
 |---|---|---|---|
 | prompt section provider | 注册 namespaced 稳定 section | 不把不可信记忆升级成系统命令 | 无 |
 | request context provider | 可选示例/场景上下文 | 注入预算内、带来源的参考数据 | 说话人由入站 DTO 传入 |
-| register_tool | 可选显式切换命令 | search/remember/forget（强制绑定 scope） | 可选受限 QQ 工具，不暴露万能管理 action |
-| SessionEvent | 版本切换诊断 | settled 后投递抽取作业 | 通过宿主回复投影订阅最终结果 |
-| generic custom entry | 人设版本标识 | 召回快照/来源引用 | 由宿主记录通道回执 |
+| register_tool | E 不提供切换工具 | search/get/remember/forget（强制绑定 scope） | 可选受限 QQ 工具，不暴露万能管理 action |
+| SessionEvent | 版本切换诊断 | settled 后登记可选抽取作业 | 通过宿主回复投影订阅最终结果 |
+| generic custom entry | 人设版本标识 | E 的召回快照保存在绑定扩展库，不重复写聊天 | 由宿主记录通道回执 |
 | host channel capability | 不需要 | 不需要 | OneBot 接入、标准化输入、最终回复发送 |
 
 persona_change、memory_ref、qq_delivery 使用命名空间 CustomEntry/扩展诊断，不再扩展核心 entry/event 枚举。扩展缺失时历史仍能打开，未知数据保留原样；未知的上下文关键消息必须显式报不兼容，不能静默丢失。
+
+阶段 E 通过显式 `SessionExtensionDefinition` 声明工厂、JSON 配置 schema/默认值和管理命令。宿主保存不可变 `extension_config`，以 CAS 更新；每会话工厂获得 `ExtensionResources(binding, domain, data_dir, models)`。管理员管理命令不启动聊天或模型，停用扩展后仍可管理数据。`models` 能力复用共享模型网关与原 logical input 预算，而不是插件自建提供商客户端。
 
 ### 6.3 生命周期与安全
 
@@ -250,23 +252,21 @@ persona_change、memory_ref、qq_delivery 使用命名空间 CustomEntry/扩展�
 
 域名采用 qq 与 agent。WebUI 是管理入口，不等于业务域：在 WebUI 查看 QQ 会话时，该会话仍是 qq 域，不能被自动转换为 agent 域。
 
-moonfox-app 的 security/services 在认证与路由后生成不可变 SessionBinding，含 opaque scope ID、domain、conversation ID、可访问资源及工具策略。记忆算法和存储由扩展拥有，作用域授权由业务包强制执行。扩展拿到绑定后的 handle，模型工具参数和前端输入都不能自由指定 domain 或另一个 session ID 来绕过授权。
+moonfox-app 的 security/services 在认证与路由后生成不可变 `SessionBinding(session_id, scope_id)`；domain、受限数据目录与模型能力经 `ExtensionResources` 另行注入，不进入核心。记忆算法和存储由扩展拥有，作用域授权由业务包强制执行。模型工具和管理参数不能覆盖 domain/scope/session 来绕过授权。
 
-隔离覆盖：
+隔离目标覆盖所有业务副本。阶段 E 已实现记录/索引、字面检索、工具 ID 读取、召回缓存与快照、抽取作业/恢复、遗忘/删除和管理授权；媒体、跨库导入导出及完整备份保留策略在后续阶段验收，不声称已完成。
 
-- 会话历史、压缩摘要、长期记忆、画像、FTS/向量索引；
-- 检索缓存、请求快照、后台抽取任务、媒体附件与历史检索工具；
-- 导入导出、删除/遗忘、备份恢复与管理授权。
-
-建议在同一 SQLite 库中使用 domain + scope 的强制过滤和复合约束；可改为分库而不改变 SDK。检索、更新、删除、合并全部校验 scope，不只是 search。主体相同不等于可见性相同，QQ 私聊和群聊默认也不自动互通。
+E 使用 `home/extensions/memory/{domain}/{sha256(scope_id)}/memory.sqlite3` 分目录存储，同时在所有 SQL 中强制 domain + scope 过滤和复合约束；分目录不是唯一防线。检索、更新、删除、合并全部校验 scope，不只是 search。主体相同不等于可见性相同，QQ 私聊和群聊默认也不自动互通。首版是安全参数化关键词/ngram 索引，没有向量或语义召回。
 
 操作者可通过受鉴权的管理端查看不同域，但管理结果不能自动成为 Agent 模型的工具结果或上下文。首版不提供自动跨域同步工具。
 
 人设文件可作为静态配置被两域选用；这不意味着共享用户记忆或关系状态。角色表达采用已确认的人设内回答；真实操作结果、权限、外部副作用仍按事实反馈。
 
+遗忘阻止未来自动召回和模型 `get`；管理员可以显式查看。删除/清空清理扩展副本及作业原文，并防止旧工作器返回后复活数据；不等于擦除追加式聊天、已产生的工具结果/模型复述、提供商副本、备份或正在执行的请求上下文。
+
 ## 8. 消息与扩展调用链
 
-### QQ
+### QQ（阶段 F 目标；[qq-bridge 参考](QQ-BRIDGE-REFERENCE.md)）
 
 ~~~text
 SnowLuma → QQ 宿主扩展
@@ -278,7 +278,7 @@ SnowLuma → QQ 宿主扩展
   → core loop → provider / 工具 → AgentEvent
   → runtime 完成恢复与边界 → SessionEvent / agent_settled
   → 应用服务提取最终可交付文本 → 持久化 outbox → QQ 扩展发送 → SnowLuma
-  → 记忆扩展后台抽取（同域、有来源、可幂等）
+  → 记忆扩展可选后台抽取（默认关闭，同域、有来源、幂等、原输入预算）
 ~~~
 
 第一条请求也必须运行上下文构造，不能只挂在 prepare_next_turn（首轮可能不调用）。同一轮工具续跑沿用绑定和快照；发现新的显式输入才重建相关 recall。每次准备从规范投影开始，避免重复注入。
@@ -323,7 +323,7 @@ MOONFOX_HOME/
 - JSONL 是会话 entry 的事实源；记忆库、inbox/outbox、配置是各自的事实源，不能宣称 SQLite 全部可重建。
 - JSONL 需定义 flush/fsync 边界，备份需固定 checkpoint；仅“追加写”不能保证 kill 后零丢失。
 - QQ 发送超时可能已经成功。outbox 记录 pending/sending/sent/unknown/failed；没有协议端幂等保障时不能承诺 exactly-once，unknown 不盲目重发。
-- 并发、时间、token/成本预算由宿主统一网关约束，记忆抽取和压缩同样计入。达到硬预算禁止新的计费请求，不能给后台任务无限豁免。
+- 并发、时间、请求数/token 预算由宿主统一网关约束，记忆抽取和压缩同样计入；当前不是金额/汇率硬预算。E 作业持久化原输入票据，恢复不借用后来输入额度；未知执行不自动重试，后台任务没有预算豁免。
 - 上下文发给云模型时，注入其中的历史和记忆也会发出；本地存储不等于不出境。
 - SnowLuma 许可与 QQ 使用条款应按采用版本审查；网络接入不自动免除商用、部署或分发限制。
 
@@ -354,7 +354,7 @@ MOONFOX_HOME/
 | B | 核心循环、双队列、工具/事件/取消、运行预算 | 无领域依赖，全分支确定性测试 |
 | C | moonfox-app 的 runtime、extension_api、扩展管理器及 headless 装配 | headless_app 示例可跑；不启用 server/前端/业务扩展也能保存与恢复会话 |
 | D | 应用服务、SessionHub、配置/授权、server 协议、独立 web-ui | 前端只通过协议工作；关闭浏览器不取消 Agent；无前端产物也可使用业务包 |
-| E | 人设扩展、记忆扩展 | 禁用后核心不受影响；跨域负例检索/工具/缓存测试 |
+| E（已实现） | 独立人设/记忆包、通用配置/管理与 WebUI | 禁用后核心不受影响；跨域记录/检索/工具/缓存/作业/删除，原输入预算与独立安装 |
 | F | QQ 扩展 + SnowLuma 联调 | 假 OneBot 测通后真机验收；可禁用 QQ 而保留 Agent |
 | G | 运维与后续扩展 | 备份恢复、删除传播、outbox unknown、预算、插件生命周期 |
 

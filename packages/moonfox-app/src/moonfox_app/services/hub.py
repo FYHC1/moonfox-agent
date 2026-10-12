@@ -32,7 +32,9 @@ from moonfox_app.security.approvals import Approvals
 from .channel import BoundChannelGateway, ChannelBinding
 from .errors import BudgetExceeded, ConflictError, InvalidConfiguration
 from .events import EventBus, Subscription
+from .extension_models import BoundExtensionModels
 from .gateway import ModelGateway
+from .managed_extensions import ManagedExtensions
 from .model_catalog import ModelCatalog
 from .readmodel import session_update, view_messages
 from .session_factory import RunPorts
@@ -69,6 +71,7 @@ class SessionHub:
         validate_extensions: Callable[[tuple[str, ...]], None] | None = None,
         compact_enabled: bool = False,
         model_catalog: ModelCatalog | None = None,
+        managed_extensions: ManagedExtensions | None = None,
     ) -> None:
         self._catalog = model_catalog or ModelCatalog(store, models)
         self._store = store
@@ -79,6 +82,7 @@ class SessionHub:
         self._extensions = tuple(extensions)
         self._validate_extensions = validate_extensions
         self._compact_enabled = compact_enabled
+        self._managed = managed_extensions or ManagedExtensions(store.home, ())
         _, self._startup_settings = store.config()
         self._validate_settings(self._startup_settings.defaults, available=False)
         self.events = EventBus(
@@ -105,6 +109,7 @@ class SessionHub:
     def _validate_settings(self, settings: SessionSettings, *, available: bool = True) -> None:
         SessionSettings.model_validate_json(settings.model_dump_json())
         self._catalog.validate_session(settings, available=available)
+        self._managed.validate(settings)
         if not set(settings.allowed_tools) <= set(self._tools):
             raise ValueError("Tools must be registered and authorized by the host")
         enabled = set(settings.enabled_extensions)
@@ -257,6 +262,7 @@ class SessionHub:
                     "scope": m.scope,
                     "capabilities": list(m.capabilities),
                     "enabled": m.id in enabled,
+                    **self._managed.describe(m.id),
                 }
                 for m in self._extensions
                 if m.scope == "session"
@@ -399,9 +405,11 @@ class SessionHub:
             settings.allowed_tools != session.settings.allowed_tools
             or settings.approval_tools != session.settings.approval_tools
             or settings.enabled_extensions != session.settings.enabled_extensions
+            or settings.extension_config != session.settings.extension_config
         ):
             raise AccessDenied("Only administrators may change tool/extension grants")
         revision = self._store.update_session(session_id, settings, expected_revision)
+        self._kick(session_id)
         self.events.publish(session_id, "config_changed", {})
         return {"revision": revision, "settings": settings.model_dump(mode="json")}
 
@@ -421,6 +429,7 @@ class SessionHub:
                     "version": m.version,
                     "scope": m.scope,
                     "capabilities": list(m.capabilities),
+                    **self._managed.describe(m.id),
                 }
                 for m in self._extensions
             ],
@@ -434,6 +443,48 @@ class SessionHub:
         self._validate_settings(settings.defaults)
         self._store.update_config(settings, expected_revision)
         return await self.config(principal)
+
+    async def extension_command(
+        self,
+        principal: Principal,
+        session_id: str,
+        extension_id: str,
+        *,
+        command: str,
+        arguments_json: str,
+        expected_revision: int,
+        request_id: str,
+    ) -> dict[str, Any]:
+        self._admin(principal)
+        session = self._authorized(principal, session_id)
+        self._text(request_id, "request_id", 128)
+        if type(expected_revision) is not int or expected_revision != session.config_revision:
+            raise ConflictError("Session configuration revision changed")
+        result = await self._managed.command(session, extension_id, command, arguments_json)
+        return {"request_id": request_id, "result_json": result}
+
+    def extension_models(self, record: SessionRecord, identity: str) -> BoundExtensionModels:
+        """Trusted bootstrap port, never exposed through HTTP or a model tool."""
+        definition = self._managed.definitions.get(identity)
+        if definition is None or "models" not in definition.manifest.capabilities:
+            raise ValueError("Managed extension has not declared model access")
+
+        def current_ticket() -> str | None:
+            actor = self._actors.get(record.id)
+            if actor is None or actor.input_id is None:
+                return None
+            return self._store.input(actor.input_id).logical_id
+
+        return BoundExtensionModels(
+            store=self._store,
+            catalog=self._catalog,
+            gateway=self._gateway,
+            binding=SessionBinding(record.id, record.scope_id),
+            extension_id=identity,
+            settings=record.settings,
+            current_ticket=current_ticket,
+            accepting=lambda: self._started and not self._closing and not self._closed,
+        )
 
     def _admin(self, principal: Principal) -> None:
         self._require_started()
@@ -519,7 +570,15 @@ class SessionHub:
         return self._approvals.resolve(approval_id, decision=decision, principal_id=principal.id)
 
     def _kick(self, session_id: str) -> None:
-        if self._closing or session_id in self._unavailable or not self._store.pending(session_id):
+        live = self._lives.get(session_id)
+        needs_refresh = (
+            live is not None and live.revision != self._store.session(session_id).config_revision
+        )
+        if (
+            self._closing
+            or session_id in self._unavailable
+            or (not self._store.pending(session_id) and not needs_refresh)
+        ):
             return
         current = self._tasks.get(session_id)
         if current is not None and not current.done():
@@ -604,10 +663,20 @@ class SessionHub:
 
     async def _drain(self, session_id: str) -> None:
         while not self._closing and session_id not in self._unavailable:
+            session = self._store.session(session_id)
+            live = self._lives.get(session_id)
+            if live is not None and live.revision != session.config_revision:
+                live.ports.revoke()
+                await live.runtime.aclose()
+                self._lives.pop(session_id)
+                session = self._store.session(session_id)
+                self._views[session_id] = self._load_view(session)
+            if self._closing:
+                return
             pending = self._store.pending(session_id)
             if not pending:
                 return
-            await self._run_input(self._store.session(session_id), pending[0])
+            await self._run_input(session, pending[0])
 
     async def _run_input(self, session: SessionRecord, pending: InputRecord) -> None:
         actor = _Actor(

@@ -195,6 +195,7 @@
       "allowed_tools": [],
       "approval_tools": [],
       "enabled_extensions": [],
+      "extension_config": [],
       "generation": {
         "frequency_penalty": null,
         "max_tokens": null,

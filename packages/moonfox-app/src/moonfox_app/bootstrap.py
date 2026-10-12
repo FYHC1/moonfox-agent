@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable, Mapping, Sequence
+from functools import partial
 from pathlib import Path
 
 from moonfox_agent.api import AgentTool, RunOptions, RunOutcome
@@ -19,6 +20,7 @@ from .extension_api import (
     PermissionChecker,
     RegistrationHandle,
     SessionBinding,
+    SessionExtensionDefinition,
     SessionView,
 )
 from .extensions import ExtensionRegistry, SessionExtensionManager
@@ -30,6 +32,7 @@ from .runtime.session.orchestration import AgentSession
 from .runtime.storage import JsonlSessionStore, SessionStore
 from .security.secrets import SecretProtector
 from .services.hub import SessionHub
+from .services.managed_extensions import ManagedExtensions
 from .services.model_catalog import ModelCatalog
 from .services.store import HostStore
 from .services.types import ModelRegistration, SessionRecord, SessionRuntime
@@ -38,9 +41,16 @@ from .services.types import ModelRegistration, SessionRecord, SessionRuntime
 class HeadlessApp:
     """Small composition handle, not a multi-session hub or a background worker."""
 
-    def __init__(self, session: AgentSession, extensions: SessionExtensionManager) -> None:
+    def __init__(
+        self,
+        session: AgentSession,
+        extensions: SessionExtensionManager,
+        *,
+        on_close: Sequence[Callable[[], None]] = (),
+    ) -> None:
         self._session = session
         self._extensions = extensions
+        self._on_close = tuple(on_close)
         self._closing = False
         self._closed = False
         self._maintenance = False
@@ -118,6 +128,8 @@ class HeadlessApp:
             self._maintenance = False
 
     async def _close(self) -> None:
+        for close in self._on_close:
+            close()
         self._session.abort()
         await self._session.wait_for_idle()
         try:
@@ -243,6 +255,7 @@ def create_application(
     registry: ExtensionRegistry | None = None,
     extension_manifests: Sequence[ExtensionManifest] = (),
     extension_grants: Mapping[str, frozenset[str]] | None = None,
+    session_extensions: Sequence[SessionExtensionDefinition] = (),
     codecs: Mapping[str, CustomEntryCodec] | None = None,
     system_prompt: str = "You are Moonfox, a helpful personal agent.",
     compaction_factory: Callable[[StreamFn, Model], CompactionPolicy] | None = None,
@@ -257,11 +270,15 @@ def create_application(
         catalog = ModelCatalog(
             store, models, transport=provider_transport, protector=secret_protector
         )
+        managed = ManagedExtensions(store.home, session_extensions)
+        extension_registry = (registry or ExtensionRegistry()).fork({})
+        managed.install(extension_registry)
     except BaseException:
         store.close()
         raise
-    extension_registry = registry or ExtensionRegistry()
     granted = dict(extension_grants or {})
+    for definition in session_extensions:
+        granted.setdefault(definition.manifest.id, frozenset(definition.manifest.capabilities))
 
     def validate_extensions(enabled: tuple[str, ...]) -> None:
         extension_registry.resolve(enabled, scope="session", grants=granted)
@@ -322,6 +339,12 @@ def create_application(
         manager = transcript(record)
         session: AgentSession | None = None
         extensions: SessionExtensionManager | None = None
+        model_ports = {
+            identity: hub.extension_models(record, identity)
+            for identity, definition in managed.definitions.items()
+            if identity in settings.enabled_extensions
+            and "models" in definition.manifest.capabilities
+        }
         try:
             manager.recover_pending_tools()
             projection = manager.projection()
@@ -342,17 +365,32 @@ def create_application(
                 permission_timeout=store.config()[1].approval_timeout_seconds + 5,
             )
             extensions = SessionExtensionManager(
-                extension_registry,
+                extension_registry.fork(
+                    {
+                        identity: partial(
+                            definition.factory,
+                            managed.resources(record, identity, model_ports.get(identity)),
+                            managed.configuration(identity, settings),
+                        )
+                        for identity, definition in managed.definitions.items()
+                        if identity in settings.enabled_extensions
+                    }
+                ),
                 actions=session,
                 enabled=settings.enabled_extensions,
                 grants=granted,
                 ensure_idle=session.ensure_idle,
+                allowed_tools=frozenset(settings.allowed_tools),
             )
             session.bind_extensions(extensions)
             await extensions.start()
             await session.refresh_extensions()
-            return HeadlessApp(session, extensions)
+            return HeadlessApp(
+                session, extensions, on_close=[port.revoke for port in model_ports.values()]
+            )
         except BaseException:
+            for port in model_ports.values():
+                port.revoke()
             try:
                 if extensions is not None:
                     await extensions.stop()
@@ -364,17 +402,19 @@ def create_application(
             raise
 
     try:
-        return SessionHub(
+        hub = SessionHub(
             store,
             models=models,
             runtime_factory=factory,
             load_view=load_view,
-            tools=[tool.name for tool in tools],
-            extensions=extension_manifests,
+            tools=[*[tool.name for tool in tools], *managed.tool_names],
+            extensions=[*extension_manifests, *(item.manifest for item in session_extensions)],
             validate_extensions=validate_extensions,
             compact_enabled=compaction_factory is not None,
             model_catalog=catalog,
+            managed_extensions=managed,
         )
+        return hub
     except BaseException:
         store.close()
         raise

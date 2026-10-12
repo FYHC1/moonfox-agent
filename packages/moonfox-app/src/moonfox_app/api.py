@@ -2,6 +2,7 @@
 
 from .bootstrap import HeadlessApp, create_application, create_headless_app
 from .config import (
+    ExtensionConfiguration,
     GenerationParameters,
     HostSettings,
     ModelSettings,
@@ -10,9 +11,11 @@ from .config import (
 )
 from .extension_api import (
     ExtensionManifest,
+    ExtensionResources,
     PermissionDecision,
     SessionBinding,
     SessionEvent,
+    SessionExtensionDefinition,
     SessionView,
 )
 from .extensions import ExtensionRegistry, HostExtensionManager, SessionExtensionManager
@@ -62,11 +65,16 @@ from .runtime.storage import (
 )
 from .security import Principal, TokenAuth
 from .security.secrets import SecretProtector, SecretStorageError
+from .services.channel import ChannelBinding
 from .services.errors import ConflictError, InvalidConfiguration, NotFoundError
 from .services.hub import SessionHub
 from .services.types import ModelRegistration
 
 __all__ = [
+    "ChannelBinding",
+    "ExtensionConfiguration",
+    "ExtensionResources",
+    "SessionExtensionDefinition",
     "GenerationParameters",
     "ModelSettings",
     "ProviderSettings",

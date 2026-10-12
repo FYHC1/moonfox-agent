@@ -32,6 +32,7 @@ SESSION_CAPABILITIES = frozenset(
         "boundary",
         "tool_check",
         "tasks",
+        "models",
     }
 )
 HOST_CAPABILITIES = frozenset({"tasks", "channel"})
@@ -93,6 +94,15 @@ class ExtensionRegistry:
         if not callable(factory):
             raise ManifestError("Extension factory must be callable")
         self._entries[manifest.id] = RegisteredExtension(deepcopy(manifest), factory)
+
+    def fork(self, factories: Mapping[str, ExtensionFactory]) -> ExtensionRegistry:
+        """Bind trusted per-session resources without modifying the host registry."""
+        if set(factories) - self._entries.keys():
+            raise ManifestError("Cannot replace an unregistered factory")
+        result = ExtensionRegistry()
+        for name, entry in self._entries.items():
+            result.register(entry.manifest, factories.get(name, entry.factory))
+        return result
 
     def resolve(
         self,

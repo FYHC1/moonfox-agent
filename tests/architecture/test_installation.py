@@ -119,8 +119,13 @@ def test_wheels_and_source_installs_work_outside_workspace(tmp_path):
         ("ai", "moonfox_ai", "moonfox_ai"),
         ("agent", "moonfox_agent", "moonfox_agent_core"),
         ("moonfox-app", "moonfox_app", "moonfox_app"),
+        ("persona", "moonfox_ext_persona", "moonfox_ext_persona"),
+        ("memory", "moonfox_ext_memory", "moonfox_ext_memory"),
     )
     for package, namespace, distribution in distributions:
+        package_path = (
+            ROOT / ("extensions" if package in {"persona", "memory"} else "packages") / package
+        )
         # Separate sdist builds prove each package owns all its build inputs.
         run(
             [
@@ -131,7 +136,7 @@ def test_wheels_and_source_installs_work_outside_workspace(tmp_path):
                 "--no-isolation",
                 "--outdir",
                 artifacts,
-                ROOT / "packages" / package,
+                package_path,
             ],
             cwd=outside,
             env=env,
@@ -170,6 +175,11 @@ def test_wheels_and_source_installs_work_outside_workspace(tmp_path):
             elif package == "agent":
                 assert sorted(req.split("<")[0].split("=")[0] for req in requirements) == [
                     "moonfox-ai",
+                    "pydantic",
+                ]
+            elif package in {"persona", "memory"}:
+                assert sorted(req.split("<")[0].split("=")[0] for req in requirements) == [
+                    "moonfox-app",
                     "pydantic",
                 ]
             else:
@@ -299,3 +309,35 @@ def test_wheels_and_source_installs_work_outside_workspace(tmp_path):
     output = run([server_python, "-I", smoke], cwd=outside, env=env)
     assert "http=200; protocol=1; api_only=True" in output
     run([server_python, "-I", "-m", "pip", "check"], cwd=outside, env=env)
+
+    extension_interpreters = {}
+    for name in ("persona", "memory"):
+        interpreter = make_environment(tmp_path / f"extension-{name}")
+        extension_interpreters[name] = interpreter
+        run([interpreter, "-I", "-m", "pip", "install", wheels[name]], cwd=outside, env=env)
+        namespace = f"moonfox_ext_{name}"
+        other = "memory" if name == "persona" else "persona"
+        code = f"""
+import importlib, importlib.util, sys
+from pathlib import Path
+api = importlib.import_module('{namespace}.api')
+assert Path(api.__file__).resolve().is_relative_to(Path(sys.prefix).resolve())
+assert api.EXTENSION.manifest.id == '{name}'
+assert not any(key.startswith(('moonfox_app.bootstrap', 'moonfox_app.runtime'))
+               for key in sys.modules)
+for module in ('fastapi', 'httpx', 'uvicorn', 'moonfox_ext_{other}', 'moonfox_ext_qq'):
+    assert importlib.util.find_spec(module) is None, module
+print('extension={name}; no_web=True')
+"""
+        assert f"extension={name}; no_web=True" in run(
+            [interpreter, "-I", "-c", code], cwd=outside, env=env
+        )
+        run([interpreter, "-I", "-m", "pip", "check"], cwd=outside, env=env)
+    # Compose both optional wheels only after proving that each installs independently.
+    interpreter = extension_interpreters["memory"]
+    run([interpreter, "-I", "-m", "pip", "install", wheels["persona"]], cwd=outside, env=env)
+    business = outside / "persona_memory.py"
+    shutil.copy2(ROOT / "examples" / "persona_memory.py", business)
+    output = run([interpreter, "-I", business], cwd=outside, env=env)
+    assert "persona=True; recall=True; qq_isolated=True" in output
+    assert "disabled=True; plain_agent=True" in output

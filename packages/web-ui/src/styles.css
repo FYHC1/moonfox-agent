@@ -356,7 +356,7 @@
   .inspector-heading > div { display: flex; align-items: center; gap: 10px; }
   .inspector-heading svg { color: var(--muted); }
   .inspector-heading h2 { font-size: 13px; font-weight: 500; }
-  .inspector-tabs { display: grid; grid-template-columns: 1fr 1fr; background: #0c131e; border: 1px solid var(--line-quiet); border-radius: 8px; padding: 3px; margin: 0 20px 4px; }
+  .inspector-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); background: #0c131e; border: 1px solid var(--line-quiet); border-radius: 8px; padding: 3px; margin: 0 20px 4px; }
   .inspector-tabs .button { min-height: 30px; padding: 5px 12px; font-size: 11px; border-radius: 5px; }
   .inspector-tabs .button[aria-selected='true'] { background: #263140; color: var(--text); box-shadow: 0 2px 6px #0002; }
   .inspector-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 20px 24px; }
@@ -428,6 +428,44 @@
   .approval-option strong { font-size: 10px; color: var(--dim); }
   .settings-footer { display: flex; flex-direction: column; gap: 12px; padding-top: 20px; }
   .settings-footer > .button-primary { width: 100%; }
+  .extension-config-list { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  .extension-config-card { min-width: 0; border: 1px solid var(--line); border-radius: 8px; background: #101824; }
+  .extension-config-summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 11px 12px; color: var(--muted); font-size: 11px; }
+  .extension-config-summary strong { min-width: 0; overflow-wrap: anywhere; font-weight: 500; }
+  .extension-config-summary code { flex: 0 0 auto; color: var(--dim); font-size: 9px; }
+  .extension-config-content { display: flex; flex-direction: column; gap: 12px; min-width: 0; padding: 0 12px 14px; }
+  .extension-config-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 12px; min-width: 0; }
+  .extension-config-fields .field { min-width: 0; }
+  .extension-config-fields textarea { width: 100%; min-width: 0; max-width: 100%; min-height: 82px; resize: vertical; font-size: 11px; }
+  .extension-config-fields .management-wide { grid-column: 1 / -1; min-width: 0; }
+  .extension-config-fields .check-option { padding-block: 0; }
+  .extension-config-content > .notice { font-size: 10px; }
+  .extension-config-error:empty { display: none; }
+  .memory-panel { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+  .memory-panel .notice { margin-block: 9px; font-size: 10px; }
+  .memory-panel .inspector-section { min-width: 0; padding-block: 16px; }
+  .memory-scope { display: flex; flex-direction: column; gap: 5px; min-width: 0; color: var(--muted); font-size: 11px; }
+  .memory-scope .field-hint { margin-top: 4px; }
+  .memory-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; min-width: 0; }
+  .memory-toolbar > div { min-width: 0; }
+  .memory-toolbar > .button { max-width: 100%; }
+  .memory-search-form, .memory-add-form, .memory-edit-form { display: flex; flex-direction: column; gap: 12px; min-width: 0; padding-block: 12px; }
+  .memory-search-form .check-option { padding-block: 0; }
+  .memory-record-list { display: grid; gap: 10px; min-width: 0; }
+  .memory-record { min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: 9px; background: #101824; }
+  .memory-record-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; min-width: 0; margin-bottom: 10px; }
+  .memory-record-heading strong { font-size: 11px; font-weight: 500; }
+  .memory-record-heading code { max-width: 58%; color: var(--dim); font-size: 9px; text-align: right; overflow-wrap: anywhere; }
+  .memory-record-text { margin-bottom: 10px; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; font-size: 12px; line-height: 1.8; color: #d9dce2; }
+  .memory-record-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; color: var(--dim); font-size: 9px; }
+  .memory-record-meta .badge { font-size: 9px; }
+  .memory-record-meta .notice { flex: 1 1 100%; }
+  .memory-actions { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; margin-top: 12px; }
+  .memory-actions .button { flex: 1 1 auto; min-width: 0; min-height: 34px; padding: 6px 8px; font-size: 10px; }
+  .memory-job-list { display: grid; gap: 8px; padding: 0; margin: 10px 0 0; list-style: none; }
+  .memory-job { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; padding: 8px; border: 1px solid var(--line-quiet); border-radius: 7px; }
+  .memory-job code { min-width: 0; overflow-wrap: anywhere; }
+  .memory-empty { min-width: 0; }
   .drawer-backdrop { position: fixed; inset: 0; z-index: 30; background: #070c1699; backdrop-filter: blur(2px); border: 0; cursor: default; }
 
   /* Independent administration surface; never tied to an active conversation. */
@@ -509,6 +547,8 @@
     .management-dialog .button, .management-dialog input:not([type='checkbox']), .management-dialog select { min-height: 44px; }
     .management-dialog .icon-button { height: 44px; width: 44px; }
     .management-dialog .generation-fields { grid-template-columns: minmax(0, 1fr); }
+    .extension-config-fields { grid-template-columns: minmax(0, 1fr); }
+    .memory-actions .button { min-height: 44px; }
     .connection-page { padding: 24px 20px 16px; }
     .connection-header .protocol-label { font-size: 8px; letter-spacing: .5px; }
     .connection-main { width: min(100%, 440px); grid-template-columns: minmax(0, 1fr); gap: 28px; padding: 40px 0; }

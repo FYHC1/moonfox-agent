@@ -1,0 +1,20 @@
+[build-system]
+requires = ["hatchling>=1.26,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "moonfox-ext-persona"
+version = "0.1.0"
+description = "Versioned, optional persona extension for Moonfox"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = ["moonfox-app==0.1.0", "pydantic>=2.12,<3"]
+
+[tool.uv.sources]
+moonfox-app = { workspace = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/moonfox_ext_persona"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src", "tests", "README.md", "pyproject.toml"]

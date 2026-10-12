@@ -108,7 +108,9 @@ export function pendingSubmission(text, uuid = () => crypto.randomUUID()) {
 }
 
 export function createDraft(settings, revision) {
-  return { settings: structuredClone(settings), revision, dirty: false, saving: false, error: null, saved: false };
+  const draftSettings = structuredClone(settings);
+  draftSettings.extension_config ??= [];
+  return { settings: draftSettings, revision, dirty: false, saving: false, error: null, saved: false };
 }
 
 export function submissionFailure(error) {

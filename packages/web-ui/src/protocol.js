@@ -47,6 +47,24 @@ export function isValid(name, value) {
   return Boolean(validator(name)(value));
 }
 
+const jsonSchemaValidators = new WeakMap();
+
+// Extension schemas arrive in the host catalog, so they are validated at the point of use and
+// never copied into the generated protocol bundle.
+export function validateJsonSchema(schema, value) {
+  if (!schema || typeof schema !== 'object' || Array.isArray(schema)) return false;
+  try {
+    let check = jsonSchemaValidators.get(schema);
+    if (!check) {
+      check = new Ajv2020({ allErrors: true, strict: false, strictNumbers: true, validateFormats: false }).compile(schema);
+      jsonSchemaValidators.set(schema, check);
+    }
+    return Boolean(check(value));
+  } catch {
+    return false;
+  }
+}
+
 export function assertContract(name, value) {
   const check = validator(name);
   if (!check(value)) throw new ProtocolError(name, check.errors);

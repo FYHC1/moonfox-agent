@@ -1,0 +1,17 @@
+[build-system]
+requires = ["hatchling>=1.26,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "moonfox-ext-memory"
+version = "0.1.0"
+description = "Scope-isolated SQLite memory extension for Moonfox sessions"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = ["moonfox-app==0.1.0", "pydantic>=2.12,<3"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/moonfox_ext_memory"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src", "tests", "README.md", "pyproject.toml"]

@@ -17,15 +17,17 @@ dev = [
 package = false
 
 [tool.uv.workspace]
-members = ["packages/ai", "packages/agent", "packages/moonfox-app"]
+members = ["packages/ai", "packages/agent", "packages/moonfox-app", "extensions/persona", "extensions/memory"]
 
 [tool.uv.sources]
 moonfox-ai = { workspace = true }
 moonfox-agent-core = { workspace = true }
 moonfox-app = { workspace = true }
+moonfox-ext-persona = { workspace = true }
+moonfox-ext-memory = { workspace = true }
 
 [tool.pytest.ini_options]
-testpaths = ["packages/ai/tests", "packages/agent/tests", "packages/moonfox-app/tests", "tests/architecture"]
+testpaths = ["packages/ai/tests", "packages/agent/tests", "packages/moonfox-app/tests", "extensions/persona/tests", "extensions/memory/tests", "tests/architecture", "tests/integration"]
 addopts = "--import-mode=importlib --strict-markers -ra"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
@@ -34,7 +36,7 @@ markers = ["installation: build and install wheels in isolated environments (opt
 [tool.ruff]
 target-version = "py312"
 line-length = 100
-src = ["packages/ai/src", "packages/agent/src", "packages/moonfox-app/src"]
+src = ["packages/ai/src", "packages/agent/src", "packages/moonfox-app/src", "extensions/persona/src", "extensions/memory/src"]
 include = ["*.py", "*.pyi", "**/pyproject.toml"]
 extend-exclude = ["docs"]
 
@@ -44,7 +46,7 @@ select = ["E", "F", "I", "UP", "B", "ASYNC"]
 [tool.mypy]
 python_version = "3.12"
 strict = true
-files = ["packages/ai/src", "packages/agent/src", "packages/moonfox-app/src"]
+files = ["packages/ai/src", "packages/agent/src", "packages/moonfox-app/src", "extensions/persona/src", "extensions/memory/src"]
 
 [tool.coverage.run]
-source = ["moonfox_ai", "moonfox_agent", "moonfox_app"]
+source = ["moonfox_ai", "moonfox_agent", "moonfox_app", "moonfox_ext_persona", "moonfox_ext_memory"]

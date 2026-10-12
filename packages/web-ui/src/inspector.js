@@ -2,6 +2,7 @@ import { el, icon, button, badge, note, statusLabel, statusTone, countLabel, mod
 import { lastInput, activeInput, pendingInputs, executionIdle } from './state.js';
 import { sessionSettingsSchema } from './protocol.js';
 import { emptyGeneration, generationEditor, generationError } from './generation.js';
+import { extensionConfigEditor } from './extension-config.js';
 
 const section = (title, content, extra) => el('section', { class: 'inspector-section' },
   el('div', { class: 'section-heading' }, el('h3', {}, title), extra), content);
@@ -115,8 +116,11 @@ export function settingsPanel(state, draft, catalog, { catalogError, catalogLoad
   form.append(section('扩展启用', el('div', { class: 'field-stack' }, extensions.length ? extensions.map((extension) => checkOption(
     extension.id, settings.enabled_extensions.includes(extension.id), !canEdit,
     (checked) => change('enabled_extensions', checked ? [...draft.settings.enabled_extensions, extension.id] : draft.settings.enabled_extensions.filter((id) => id !== extension.id)),
-    extension.unregistered ? '不在当前宿主目录中' : `v${extension.version ?? '—'}${Array.isArray(extension.capabilities) && extension.capabilities.length ? ` · ${extension.capabilities.join(' / ')}` : ''}`,
+    extension.unregistered ? '不在当前宿主目录中' : `v${extension.version ?? '—'}${Array.isArray(extension.capabilities) && extension.capabilities.length ? ` · ${extension.capabilities.join(' / ')}` : ''}${extension.tools?.length ? ` · 工具 ${extension.tools.join(' / ')}` : ''}${extension.commands?.length ? ` · 管理命令 ${extension.commands.join(' / ')}` : ''}`,
   )) : el('p', { class: 'field-hint' }, '暂无可启用扩展；只能使用宿主登记的能力。'))));
+  const configEditors = extensions.filter((extension) => extension.config_schema && typeof extension.config_schema === 'object').map((extension) =>
+    extensionConfigEditor(extension, settings, { disabled: !canEdit, onChange: change, onValidityChange: () => refreshSaveState() })).filter(Boolean);
+  if (configEditors.length) form.append(section('扩展配置', el('div', { class: 'extension-config-list' }, configEditors.map((editor) => editor.element))));
   const validation = el('p', { class: 'error-text', role: 'status' });
   const save = button(draft.saving ? '正在保存…' : '保存会话配置', { type: 'submit', variant: 'primary', icon: 'check' });
   const footer = el('div', { class: 'settings-footer' }, validation,
@@ -127,9 +131,10 @@ export function settingsPanel(state, draft, catalog, { catalogError, catalogLoad
   function refreshSaveState() {
     const inconsistent = draft.settings.max_turns_per_run > draft.settings.max_requests_per_input;
     const generationIssue = generationError(draft.settings.generation ?? emptyGeneration());
-    validation.textContent = inconsistent ? '每次运行轮次不能超过单输入请求上限。' : generationIssue;
+    const extensionIssue = configEditors.some((editor) => !editor.validate());
+    validation.textContent = inconsistent ? '每次运行轮次不能超过单输入请求上限。' : generationIssue || (extensionIssue ? '请先修正扩展配置的 schema 错误。' : '');
     if (draft.dirty) footer.querySelector('.notice-success')?.remove();
-    save.disabled = !canEdit || !draft.dirty || draft.saving || inconsistent || Boolean(generationIssue) || ['conflict', 'uncertain'].includes(draft.error?.kind);
+    save.disabled = !canEdit || !draft.dirty || draft.saving || inconsistent || Boolean(generationIssue) || extensionIssue || ['conflict', 'uncertain'].includes(draft.error?.kind);
   }
   refreshSaveState();
   form.append(footer);

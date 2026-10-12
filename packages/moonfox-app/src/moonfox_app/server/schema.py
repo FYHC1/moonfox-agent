@@ -121,6 +121,10 @@ class ExtensionView(DTO):
     scope: str
     capabilities: list[str]
     enabled: bool
+    config_schema: dict[str, Any] | None = None
+    default_config_json: str | None = None
+    commands: list[str] = Field(default_factory=list)
+    tools: list[str] = Field(default_factory=list)
 
 
 class Snapshot(DTO):
@@ -252,9 +256,20 @@ class Deleted(DTO):
     deleted: Literal[True] = True
 
 
+class ExtensionCommand(RevisionCommand):
+    arguments_json: str = Field(default="{}", max_length=32768)
+
+
+class ExtensionCommandResult(DTO):
+    request_id: str
+    result_json: str = Field(max_length=1048576)
+
+
 SCHEMAS: dict[str, type[BaseModel]] = {
     cls.__name__: cls
     for cls in (
+        ExtensionCommand,
+        ExtensionCommandResult,
         RevisionCommand,
         PutProvider,
         ProviderView,

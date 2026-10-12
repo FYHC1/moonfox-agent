@@ -70,6 +70,11 @@ def violations(source, module, is_package=False):
                 continue
             elif root == "httpx" and module == "moonfox_app.services.http_transport":
                 continue
+            elif (
+                root in {"moonfox_ext_persona", "moonfox_ext_memory"}
+                and module == "moonfox_app.cli"
+            ):
+                continue
             elif root not in sys.stdlib_module_names and root not in ALLOWED_EXTERNAL:
                 errors.append(target)
     return errors

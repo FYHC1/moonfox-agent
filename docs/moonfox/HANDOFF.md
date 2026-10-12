@@ -2,13 +2,13 @@
 
 > **用途**：当前实施交接文档，保留设计决策并记录已验证的阶段进展。新会话从本页继续，无需回溯历史对话。
 >
-> **当前状态**：**阶段 A–D、提供商基础管理、Responses/模型 ID 及 9router 兼容修复已实现并验收**。三种协议、多提供商/模型/只写凭据/生成参数通过应用共享目录持久化，WebUI、headless 与后续 QQ 共用；E/F 尚未开始。
+> **当前状态**：**阶段 A–E、共享提供商/模型管理和 9router 兼容修复已实现并验收**。E 包含独立人设、隔离记忆、通用宿主接口与 Web 管理；QQ 客户端与真实联调仍属于 F。阶段 E 提交/推送哈希以 Git 为准。
 
 ---
 
 ## 0. 一句话状态
 
-阶段 C `012211b`、D `15b5694`、管理基线 `4c0d69b`、Responses/ID `e04266f` 和会话路由修正 `b26ed27` 已推送。本轮修复真实 9router 流的空字段及缺省模型元数据兼容性，已验证 DeepSeek 的 Chat Completions / Responses 短文本调用与真实 WebUI；Agent 核心保持不变。启动见 [STAGE-D.md](STAGE-D.md)，管理及兼容性契约见 [PROVIDER-MANAGEMENT.md](PROVIDER-MANAGEMENT.md)。
+阶段 E 提供两个独立可选包 `moonfox-ext-persona` / `moonfox-ext-memory`，不修改 ai/agent 核心。配置与管理员记忆管理经同一 Hub/HTTP API；可选模型抽取复用原输入预算，默认关闭。启动/边界见 [STAGE-E.md](STAGE-E.md)，用户提供项目的只读调研见 [QQ-BRIDGE-REFERENCE.md](QQ-BRIDGE-REFERENCE.md)。此前已推送的 9router 兼容修复为 `71093f2`。
 
 ### 当前代码边界
 
@@ -16,17 +16,17 @@
 - `moonfox_agent.api`：steering/follow-up 双队列（one_at_a_time/all）、完整请求/工具/turn 钩子、并行/串行工具、受检嵌套调用、事件、取消和显式运行预算；项目内仅依赖 ai。
 - `continue_`、`reset`、状态替换/模型/工具设置均提供公开入口；运行中修改规范状态被拒绝，取消须等待 idle。
 - 默认工具执行改为 parallel；任一工具 sequential 覆盖使整批串行。阶段 A 四参数 execute 保持兼容，嵌套调用使用新增 execute_with_context 与 ctx.execute_tool。
-- `moonfox_app.api`：headless 单会话与 SessionHub，持久 inbox/outbox、共享提供商/模型/生成参数、配置/预算/授权；可选 `server` 和 `providers` extras。runtime/SDK 不读取具体产品配置；人设/记忆/QQ 业务扩展尚未实现。
+- `moonfox_app.api`：headless 单会话与 SessionHub，持久 inbox/outbox、共享提供商/模型/生成参数、配置/预算/授权、受管会话扩展；可选 `server` 和 `providers` extras。runtime/SDK 不读取具体产品配置。人设/记忆为独立可选分发，仅使用 `extension_api`；QQ 业务包尚未实现。
 
 ### 已验证与复现
 
 - `python scripts/check.py --installation --web`：Ruff、格式、strict mypy、Python 单元/架构/独立安装、协议导出一致性和前端测试/构建。浏览器另外执行 `npm.cmd --prefix packages/web-ui run test:browser`。
 - 阶段 B 最终实测：完整验收 **209 passed**；Agent 专项 **126 passed**；mypy strict 检查 **19** 个源码文件；coverage 启用分支统计的总覆盖率 **97%**（非 100% 分支覆盖）。
-- 阶段 C 基线 448 passed、D 基线 576 passed、管理基线 804 passed、Responses/ID 947 passed、会话路由修正 950 passed；当前 9router 兼容修复 **991 passed**（含安装）、strict mypy **88** 个源码文件，Ruff 格式 **133** 文件；前端 **58** 单元测试、构建与 **14/14** Edge 浏览器测试通过。
-- 安装验收三个包 sdist → wheel，五个干净环境：AI 单包、Agent、headless app、依次目录安装、server/providers extras。普通核心/headless 不安装 Web 框架、httpx 或前端产物。
-- 六个示例复制到仓库外用 `python -I`：core_only/core_stage_b、headless_app/minimal_extension、application_service/server_smoke。后两者验证 durable 接收/完成分离和 API-only 安装。
+- 阶段 C 基线 448 passed、D 基线 576 passed、管理基线 804 passed、Responses/ID 947 passed、会话路由修正 950 passed、9router 修复 991 passed。阶段 E 最终 **1052 Python tests passed**（含安装）、strict mypy **105** 源文件、Ruff 格式 **157** 文件；前端 **64/64** 单元测试、生产构建与 **19/19** Edge 浏览器夹具通过；独立真实后端的离线模型烟雾测试也通过，详见 STAGE-E。
+- 安装验收五个包 sdist → wheel，七个干净环境：保留 AI 单包、Agent、headless app、依次目录安装、server/providers extras，再分别验证 persona-only、memory-only 及组合。普通核心/headless 不安装业务扩展、Web 框架、httpx 或前端产物。
+- 七个示例复制到仓库外用 `python -I`：core_only/core_stage_b、headless_app/minimal_extension、application_service/server_smoke、persona_memory。独立导入不注入 PYTHONPATH。
 - 实测 Windows / Python 3.14.8；声明最低 Python 3.12，但本机没有对 3.12 单独执行测试。开发工具安装在本会话 scratch 虚拟环境，不改全局 Python。
-- Git 分支 `main`，公开仓库 `https://github.com/FYHC1/moonfox-agent`；阶段 A `a92898f`、B `cb9ce06`、C `012211b`、D `15b5694`、管理基线 `4c0d69b`、Responses/ID `e04266f`、会话路由修正 `b26ed27` 已推送；9router 兼容修复的最新哈希/推送状态以 Git 为准。使用仓库局部 noreply 身份与 GitHub CLI 凭据，不把 token 写入项目。
+- Git 分支 `main`，公开仓库 `https://github.com/FYHC1/moonfox-agent`；阶段 A `a92898f`、B `cb9ce06`、C `012211b`、D `15b5694`、管理基线 `4c0d69b`、Responses/ID `e04266f`、会话路由修正 `b26ed27`、9router 修复 `71093f2` 已推送；阶段 E 最新哈希/推送状态以 Git 为准。使用仓库局部 noreply 身份与 GitHub CLI 凭据，不把 token 写入项目。
 - **阶段交付规则（用户确认）**：每完成一个阶段，先完成相关验收，提交并推送 GitHub、核对本地/远程哈希一致，再开始下一阶段。阶段 C 推送必须先于阶段 D 实现。
 
 实现修正参考伪代码：取消信号以 AI 层协议表示，避免反向依赖；流不是广播，溢出明确失败且最终结果可等待；未终止流确定性报错；快照采用深拷贝；未知自定义消息要求显式 codec，编程错误不冒充模型失败。
@@ -45,7 +45,7 @@
 - runtime 仅依赖核心公开 API、轻量 SDK 和注入端口，不 import extensions/services/config/security/jobs/server 的具体实现；SDK 导入不载入 runtime/bootstrap/扩展宿主，不创建任务/线程/进程/网络连接。
 - entry 具有 id/parent_id；消息 entry 沿用 Agent message_id。模型/thinking 变更、context edit、compaction、namespaced custom 均追加为事实；投影和持久 leaf 可重建分支，原 entry 不删除。
 - JSONL 使用 begin/entry/commit + SHA-256、修订号 CAS、成功批 flush/fsync 和 OS 单写者锁。损坏/未提交尾部截断到安全边界；中部损坏/重复 ID/孤儿 parent 报错。不是网络分布式存储，也不承诺硬件故障绝对零丢失。
-- `SessionBinding(session_id, scope_id)` 是不可变 opaque 绑定，恢复须完全匹配；身份认证/domain 路由在 D/E 阶段补齐，当前不宣称实现 QQ/Agent 记忆隔离验收。
+- `SessionBinding(session_id, scope_id)` 是不可变 opaque 绑定，恢复须完全匹配；C 只提供绑定契约，D 已补身份/domain 路由，E 通过作用域资源与独立记忆包完成两域多会话隔离验收。
 - 缺失尾部工具结果恢复为 unknown 错误，不自动重放；未知 custom 数据保留，关键上下文缺 codec 明确报不兼容。持久化为严格有限 JSON，未知 role/type/字段不得静默丢弃。
 - 首轮/每次请求从规范投影重建 prompt/context。section 增删版本化提交；参考块有来源、受 token 估算预算约束，不污染 transcript，不复用失败检索结果。卸载移除工具与 section。
 - 可注入压缩策略；支持手动和显式阈值（每 run 次数/超时上限）。切点不拆工具配对，系统/工具基线保留，新摘要可纠正旧事实。非法/取消/无效压缩不提交，不自动 retry/reenter/reset 预算。
@@ -105,9 +105,26 @@
 - 8765 原进程未加载此前 Responses/ID 更新，已在空闲时备份 SQLite/JSONL 并以同一 home/令牌重启，检查最新协议加载与目录恢复。内置浏览器面板仍不可用，使用本机 Edge/Playwright；不影响用户访问 `http://127.0.0.1:8765/`。
 - **数据位置提醒**：用户本次真实配置仍在本 PI 会话 scratch 的 `interactive-preview-home`，不是固定正式目录；备份与测试产物也仅在 scratch。删除本 PI 会话前应迁移到固定私有 `--home`，本轮未擅自迁移。只保留带“修复验证/实测”标题的新增验证对话，未改写原聊天记录。
 
-### 下一步：阶段 E
+### 阶段 E：人设与隔离记忆
 
-下一阶段需用户确认后开始。先读本页、ARCHITECTURE/DESIGN、应用包 README、STAGE-D 和 PROVIDER-MANAGEMENT。实现可启停的人设/记忆会话扩展，默认 honesty_mode=roleplay；隔离覆盖数据库、检索、缓存、作业与删除。SDK 不可越权读取全局 storage。后续 QQ/SnowLuma 属 F，复用共享提供商/模型目录，不另建凭据配置；每阶段验收后先提交推送再进入下一阶段。
+- 两个独立可选包均为 0.1.0，普通应用没有强制依赖；CLI `--extension persona --extension memory` 只登记，不替已有会话启用扩展、工具授权或模型抽取。两个核心及两份保留参考文档本轮不改。
+- `SessionExtensionDefinition` 提供工厂/配置 schema/默认值/工具/管理命令；`ExtensionConfiguration` JSON 快照用会话 CAS 保存。宿主每会话 fork registry，注入 `ExtensionResources(binding, domain, data_dir, models)`；配置只在安全边界替换实例，卸载中再次保存时下个输入仍读最新修订。
+- 人设 `honesty_mode=roleplay` 默认，另有 honest/deflect；首轮注入 `persona.identity`，携带修订/SHA256，完整文本版本化，停用移除，工具续轮不叠加。静态人设没有跨域关系库，不伪造权限或工具成功。
+- 记忆目录 `home/extensions/memory/{domain}/{sha256(scope_id)}/memory.sqlite3`；所有 SQL、ID 工具、合并、缓存/快照、作业恢复与删除仍使用 domain+scope。首版是字面关键词/CJK n-gram 检索，不是向量/语义召回。参考是有来源的临时 ContextBlock，不升级为 system 或反复落聊天。
+- 默认 recall=true、max_results=6、max_reference_tokens=800、extraction=off、extraction_max_tokens=512。工具 search/get/remember/forget 另行授权；模型声明按 allowlist 过滤，实际执行仍强制检查。管理员 CRUD/遗忘/删除/清空/jobs 绑定当前会话，不启动聊天、runtime 或模型。
+- 抽取仅在显式开启后登记幂等作业，只发送选定真实用户输入；来源由宿主绑定、subject 固定 conversation、置信度封顶 0.6。SQLite schema 2 保存原 logical input 预算票据；恢复 pending 不借用新额度，缺票据失败关闭，running→unknown 不重试。最多 4 个受管任务，停止不再派发，旧模型端口撤销。
+- 遗忘阻止未来召回及模型 `get`，forget 不回显正文；管理员可显式查看已遗忘记录。删除扩展副本和作业原文并用 epoch 防止旧结果复活，不宣称擦除 JSONL/已产生的工具结果或复述/远端/备份/当前请求上下文。
+- 有界复核发现的“模型按 ID 读取已遗忘文本”和“同毫秒/时钟回拨时快照淘汰刚写入项”均先加失败回归后修复。跨重启借错预算、卸载中热配置竞态也有先失败后转绿的回归；修复后记忆/宿主/集成专项 **39 passed**，最终全量 **1052 passed**。
+- 本机 pytest 偶发卡在 `_pytest.pathlib._force_symlink` 的辅助 current 链接创建；最终检查通过 scratch-only 公共 fixture 用 `mktemp(..., numbered=False)` 避免该链接，不改产品/断言、不跳过测试。安装验收清除 PYTHONPATH、仍用 `python -I`。详见 STAGE-E 验收说明。保留 Starlette/httpx 上游警告；本轮不重算覆盖率。
+- Web 使用导出协议及扩展 schema，保留未知配置，管理员记忆页只操作当前会话；切换/退出中止请求并忽略迟到响应，409 保留草稿、未知网络写入不自动重发。最终 **64/64** JS、构建、**19/19** Edge 夹具通过；真实 Python CLI + 离线 demo 的独立 home/临时端口验证人设配置、记忆增改/遗忘/删除和刷新恢复，390px 无横向溢出、页面错误 0、local/sessionStorage 为空，默认输入仅 1 次模型请求。
+
+- 阶段 E 未调用真实收费模型、未连接 QQ、未重启 8765 或改动用户原模型/凭据/默认值/会话。生产前端构建不意味着已有 Python 进程加载新接口；启用 E 需安全重启并沿用原 home/令牌。用户真实数据仍在 PI scratch，删除 PI 会话前应经确认迁移固定私有目录。
+
+### 下一步：阶段 F
+
+用户确认后实现自写薄 OneBot 11 客户端，SnowLuma 优先/NapCat 备选，首版 reverse WS Universal。先完成假 OneBot 的 echo/断连/重放/跨账号与目标授权/unknown 发送，再在明确授权的测试目标真机验收。复用现有 ChannelGateway、共享模型目录和 durable inbox/outbox，不引入 SDK/MCP/NoneBot2，也不另建凭据配置。
+
+qq-bridge 只读检查固定提交 `9df6a7e7fc5abcb36793337f778483bd442a3d2d`：借鉴引用归属/负缓存、群触发与有界合并、发送时权限复检、消息分段、连接/账号健康分层；不照搬 DSH/SDK/MCP 单体、内存队列或社交状态。未安装/执行其代码，项目自身 MIT 与 SnowLuma 独立许可需分别核对。每阶段验收后先提交推送并核对远端，再进入下一阶段。
 
 文档维护：Ruff 只处理 Python 文件，排除 docs；原 mini-pi 和历史草案保持本轮前的内容。
 
@@ -182,7 +199,7 @@ SnowLuma ↔ QQ 宿主扩展 ↔ ChannelGateway / 应用服务
 
 ---
 
-## 4. 目录规划（ai/agent、阶段 C 应用模块与示例已创建，其余按路线推进）
+## 4. 目录规划（阶段 A–E 已实现，QQ/运维部分按后续路线推进）
 
 ```text
 moonfox-agent/
@@ -323,6 +340,8 @@ class HostExtension(Protocol):
 | `register_command(definition)` | 显式命令，入口鉴权由宿主完成 |
 | `stage_entries(drafts)` | 只能提交授权范围的 namespaced custom entry |
 | `enqueue(message, delivery)` | 仅当前会话 steer/follow_up；不绕过预算 |
+| `SessionExtensionDefinition` | 配置校验/默认值/工具/JSON 管理命令；仅显式登记可信包 |
+| `ExtensionResources.models` | 声明 models 能力后获得同会话计量端口；作业保存原输入预算票据 |
 
 ### 宿主扩展能力（QQ）
 
@@ -335,21 +354,11 @@ class ChannelGateway(Protocol):
 
 ### 记忆隔离
 
-```python
-@dataclass(frozen=True, slots=True)
-class MemoryScope:
-    domain: Literal["qq", "agent"]
-    scope_id: str
+`MemoryScope(domain, scope_id)` 属于独立记忆包，是不可变值；`ScopedMemoryStore` 绑定只读 scope，不提供跨范围查询入口。具体方法以 `moonfox_ext_memory.api` 和其测试为准。
 
-class ScopedMemoryStore(Protocol):
-    async def search(self, query: str, limit: int) -> list[MemoryRecord]: ...
-    async def remember(self, candidate: MemoryCandidate) -> str: ...
-    async def forget(self, memory_id: str) -> None: ...
-```
-
-- 域绑定由应用服务在认证路由后生成**不可变 SessionBinding**
-- 模型工具参数与前端输入**都不能**自由指定 domain
-- 隔离覆盖：历史、摘要、记忆、画像、索引、检索缓存、请求快照、抽取作业、媒体、导入导出、删除、备份
+- 宿主认证/路由后生成 `SessionBinding(session_id, scope_id)`，domain 与数据目录经 `ExtensionResources` 注入，runtime 无需导入记忆库。
+- 模型工具和管理 JSON 参数不能覆盖 domain/scope/session；按 ID 读取与写入也必须校验绑定，不仅 search。
+- E 已覆盖记录/索引、检索/缓存/快照、作业/恢复、管理/删除；媒体、完整备份与导入导出留在后续阶段，不冒充已验收能力。
 
 ---
 
@@ -360,6 +369,8 @@ class ScopedMemoryStore(Protocol):
 | [README.md](README.md) | 文档入口、包布局、职责约束 | 先读 |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | 整体架构 11 节：目标映射、包边界、目录、核心保留/移出、扩展系统、记忆隔离、调用链、部署存储、实施顺序 | **实现前必读** |
 | [DESIGN.md](DESIGN.md) | 接口设计 8 节：公开 API、run 契约、扩展 SDK、派发/上下文/事务、业务扩展契约、预算事件、验证清单 | 写接口时查 |
+| [STAGE-E.md](STAGE-E.md) | 人设/记忆安装配置、管理、隔离、预算与删除边界、最终验收 | 启用扩展前必读 |
+| [QQ-BRIDGE-REFERENCE.md](QQ-BRIDGE-REFERENCE.md) | 固定提交的只读调研、取舍与许可/联调边界 | 阶段 F 开始前读 |
 | [history/DESIGN-v1.md](history/DESIGN-v1.md) | 早期草案（2356 行） | **不要读**，已废弃 |
 | [../mini-pi/DESIGN.md](../mini-pi/DESIGN.md) | pi 骨架 3499 行：类型、EventStream、transcript 重放、双层循环、钩子、边界草稿、19 条接缝 | **实现 ai/agent 层的主要参考** |
 
@@ -432,7 +443,7 @@ api.openai.com、api.anthropic.com 返回 403（区域/WAF 拦截）
 | **B** | 核心循环、双队列、工具/事件/取消、运行预算 | 无领域依赖，全分支确定性测试 |
 | **C** | moonfox-app 的 runtime、extension_api、扩展管理器、headless 装配 | headless 示例可跑；不启用 server/前端/扩展也能保存恢复会话 |
 | **D** | 应用服务、SessionHub、配置/授权、server 协议、独立 web-ui | 前端只通过协议工作；关闭浏览器不取消 Agent |
-| **E** | 人设扩展、记忆扩展 | 禁用后核心不受影响；跨域负例测试 |
+| **E（已实现）** | 独立人设/记忆、配置/管理、原输入计量端口 | 禁用后核心不受影响；两域多会话负例与独立安装 |
 | **F** | QQ 扩展 + SnowLuma 联调 | 假 OneBot 测通后真机验收；可禁用 QQ 保留 Agent |
 | **G** | 运维与后续扩展 | 备份恢复、删除传播、outbox unknown、预算、插件生命周期 |
 

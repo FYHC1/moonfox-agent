@@ -186,6 +186,25 @@ export class ApiClient {
     });
   }
 
+  async extensionCommand(id, extensionId, command, body, signal) {
+    const result = await this.request(
+      `/sessions/${encodeURIComponent(id)}/extensions/${encodeURIComponent(extensionId)}/commands/${encodeURIComponent(command)}`,
+      { method: 'POST', body, inputSchema: 'ExtensionCommand', outputSchema: 'ExtensionCommandResult', signal },
+    );
+    if (result.request_id !== body.request_id) throw new ProtocolError('ExtensionCommandResult identity');
+    let parsed;
+    try {
+      parsed = JSON.parse(result.result_json, (key, value) => {
+        if (['__proto__', 'prototype', 'constructor'].includes(key)) throw new TypeError('Unsafe JSON key');
+        return value;
+      });
+    } catch {
+      throw new ProtocolError('ExtensionCommand result JSON');
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new ProtocolError('ExtensionCommand result object');
+    return { ...result, result: parsed };
+  }
+
   subscribe(snapshot, callbacks = {}) {
     const url = new URL(`${this.origin}/api/v1/sessions/${encodeURIComponent(snapshot.session_id)}/events`);
     url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';

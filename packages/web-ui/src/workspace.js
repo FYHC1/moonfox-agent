@@ -5,6 +5,7 @@ import { ProtocolError } from './protocol.js';
 import { ConversationView, emptyConversation, approvalCard } from './conversation.js';
 import { overviewPanel, settingsPanel } from './inspector.js';
 import { ProviderManager } from './provider-manager.js';
+import { createMemoryView, memoryPanel, parseMemoryResult } from './memory.js';
 
 export class Workspace {
   constructor({ api, identity, sessions, onDisconnect }) {
@@ -27,6 +28,11 @@ export class Workspace {
     this.inspectorOpen = matchMedia('(min-width: 1180px)').matches;
     this.sidebarOpen = false;
     this.disposed = false;
+    this.memoryGeneration = 0;
+    this.memoryRequestSequence = 0;
+    this.memoryController = null;
+    this.memoryEntryPending = null;
+    this.memory = createMemoryView();
     this.stream = new SessionStream(api, {
       state: (state, source) => this.receiveState(state, source),
       status: (status, detail) => { this.streamStatus = status; this.streamDetail = detail; this.renderConnection(); this.renderComposer(); this.renderInspector(); },
@@ -129,12 +135,18 @@ export class Workspace {
   buildInspector() {
     this.overviewTab = button('概览', { variant: 'ghost', role: 'tab', id: 'overview-tab', 'aria-controls': 'inspector-body', 'aria-selected': 'true', onClick: () => this.setInspectorTab('overview') });
     this.settingsTab = button('配置', { variant: 'ghost', role: 'tab', id: 'settings-tab', 'aria-controls': 'inspector-body', 'aria-selected': 'false', tabindex: -1, onClick: () => this.setInspectorTab('settings') });
+    this.memoryTab = button('记忆', { variant: 'ghost', role: 'tab', id: 'memory-tab', 'aria-controls': 'inspector-body', 'aria-selected': 'false', tabindex: -1, onClick: () => this.setInspectorTab('memory') });
+    const tabNames = ['overview', 'settings', 'memory'];
+    const tabButtons = { overview: this.overviewTab, settings: this.settingsTab, memory: this.memoryTab };
     const tabs = el('div', { class: 'inspector-tabs', role: 'tablist', 'aria-label': '会话详情视图', onKeydown: (event) => {
       if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
-        event.preventDefault(); this.setInspectorTab(event.key === 'Home' ? 'overview' : event.key === 'End' ? 'settings' : this.inspectorTab === 'overview' ? 'settings' : 'overview');
-        (this.inspectorTab === 'overview' ? this.overviewTab : this.settingsTab).focus();
+        event.preventDefault();
+        const current = tabNames.indexOf(this.inspectorTab);
+        const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabNames.length - 1
+          : (current + (event.key === 'ArrowRight' ? 1 : tabNames.length - 1)) % tabNames.length;
+        this.setInspectorTab(tabNames[next]); tabButtons[tabNames[next]].focus();
       }
-    } }, this.overviewTab, this.settingsTab);
+    } }, this.overviewTab, this.settingsTab, this.memoryTab);
     this.inspectorBody = el('div', { class: 'inspector-body', id: 'inspector-body', role: 'tabpanel', 'aria-labelledby': 'overview-tab', tabindex: 0 });
     return el('aside', { id: 'inspector', class: 'inspector', 'aria-label': '会话详情', tabindex: -1 },
       el('header', { class: 'inspector-heading' }, el('div', {}, icon('panel', 17), el('h2', {}, '会话详情')),
@@ -165,6 +177,7 @@ export class Workspace {
       previousDraft.saving = false;
       previousDraft.error = { kind: 'uncertain', message: '切换时保存回执未确认，请重新载入配置核对。' };
     }
+    this.resetMemoryScope(id);
     this.activeId = id;
     ++this.selection;
     this.state = null;
@@ -183,6 +196,7 @@ export class Workspace {
     if (this.disposed || state.sessionId !== this.activeId) return;
     const stick = this.nearBottom();
     this.state = state;
+    if (this.memory.sessionId === state.sessionId) this.memory.domain = state.session.domain;
     const seqLabel = this.inspectorBody.querySelector('#inspector-seq');
     if (seqLabel) seqLabel.textContent = `seq ${state.seq}`;
     const index = this.sessions.findIndex((session) => session.id === state.sessionId);
@@ -194,6 +208,7 @@ export class Workspace {
     } else if (existing.dirty && !existing.saving && existing.revision !== state.configRevision) {
       existing.error = { kind: 'conflict', message: '配置修订已变化，请重新载入。' };
     }
+    if (this.memoryEntryPending === this.selection && this.inspectorTab === 'memory') this.maybeLoadEnteredMemory();
     const receipt = this.composer().receipt;
     if (receipt && state.inputs.some((input) => input.id === receipt.input_id && ['completed', 'aborted', 'cancelled', 'canceled', 'error', 'limit_reached', 'unknown'].includes(input.status))) this.composer().receipt = null;
     this.renderHeader(); this.renderConversation();
@@ -445,23 +460,167 @@ export class Workspace {
   renderInspector(force = false) {
     if (!this.inspectorBody || this.disposed) return;
     const draft = this.drafts.get(this.activeId);
+    const memoryKey = JSON.stringify([this.activeId, this.selection, Boolean(this.state), this.state?.session?.domain,
+      this.catalog, this.catalogError, this.catalogLoading, this.memory]);
     const key = this.inspectorTab === 'overview' ? JSON.stringify([this.state?.session, this.state?.inputs, this.state?.settings, this.state?.configRevision, this.state?.extensions, this.state?.capabilities, this.state?.epoch, this.operation.busy, this.ready()])
-      : JSON.stringify([this.activeId, Boolean(this.state), this.state?.capabilities, this.catalog, this.catalogError, this.catalogLoading, draft?.revision, draft?.saving, draft?.error, draft?.saved]);
+      : this.inspectorTab === 'settings' ? JSON.stringify([this.activeId, Boolean(this.state), this.state?.capabilities, this.catalog, this.catalogError, this.catalogLoading, draft?.revision, draft?.saving, draft?.error, draft?.saved])
+        : memoryKey;
     if (!force && key === this.inspectorRenderKey) return;
     this.inspectorRenderKey = key;
     const scroll = this.inspectorBody.scrollTop;
-    this.inspectorBody.replaceChildren(this.inspectorTab === 'overview' ? overviewPanel(this.state, { onSettings: () => this.setInspectorTab('settings'), onCompact: () => void this.control('compact'), compactBusy: this.operation.busy === 'compact', connected: this.ready() })
-      : settingsPanel(this.state, draft, this.catalog, {
-        catalogError: this.catalogError, catalogLoading: this.catalogLoading, onCatalog: () => void this.loadCatalog(),
-        canConfigure: this.identity.is_admin && this.capable('configure'),
-        onChange: (key, value) => {
-          draft.settings[key] = value; draft.dirty = true; draft.saved = false;
-          if (draft.error?.kind !== 'conflict' && draft.error?.kind !== 'uncertain') draft.error = null;
-          this.inspectorRenderKey = JSON.stringify([this.activeId, Boolean(this.state), this.state?.capabilities, this.catalog, this.catalogError, this.catalogLoading, draft.revision, draft.saving, draft.error, draft.saved]);
-        },
-        onSave: () => void this.saveSettings(), onReload: () => void this.reloadSettings(),
-      }));
+    const memoryFromCatalog = this.catalog?.extensions?.find((extension) => (extension.id ?? extension.name) === 'memory');
+    const memoryFromSnapshot = this.state?.extensions?.find((extension) => extension.id === 'memory');
+    const memoryExtension = memoryFromCatalog ?? (!this.catalog ? memoryFromSnapshot : null);
+    const memoryInstalled = this.catalog ? Boolean(memoryFromCatalog) : Boolean(memoryFromSnapshot);
+    const memoryCommands = Array.isArray(memoryExtension?.commands) ? memoryExtension.commands : [];
+    const memoryConfigEntry = (this.state?.settings?.extension_config ?? []).find((entry) => entry?.extension_id === 'memory');
+    let memoryRecall = true;
+    if (typeof memoryConfigEntry?.config_json === 'string') {
+      try { const config = JSON.parse(memoryConfigEntry.config_json); if (typeof config?.recall === 'boolean') memoryRecall = config.recall; } catch { /* Preserve invalid server data; the config editor reports it. */ }
+    }
+    const memoryEnabled = Boolean(this.state?.settings?.enabled_extensions?.includes('memory'));
+    const view = this.inspectorTab === 'overview' ? overviewPanel(this.state, {
+      onSettings: () => this.setInspectorTab('settings'), onCompact: () => void this.control('compact'),
+      compactBusy: this.operation.busy === 'compact', connected: this.ready(),
+    }) : this.inspectorTab === 'settings' ? settingsPanel(this.state, draft, this.catalog, {
+      catalogError: this.catalogError, catalogLoading: this.catalogLoading, onCatalog: () => void this.loadCatalog(),
+      canConfigure: this.identity.is_admin && this.capable('configure'),
+      onChange: (key, value) => {
+        draft.settings[key] = value; draft.dirty = true; draft.saved = false;
+        if (draft.error?.kind !== 'conflict' && draft.error?.kind !== 'uncertain') draft.error = null;
+        this.inspectorRenderKey = JSON.stringify([this.activeId, Boolean(this.state), this.state?.capabilities, this.catalog, this.catalogError, this.catalogLoading, draft.revision, draft.saving, draft.error, draft.saved]);
+      },
+      onSave: () => void this.saveSettings(), onReload: () => void this.reloadSettings(),
+    }) : memoryPanel(this.state, this.memory, {
+      isAdmin: this.identity.is_admin, catalogLoading: this.catalogLoading, catalogError: this.catalogError,
+      installed: memoryInstalled, commands: memoryCommands, enabled: memoryEnabled, recall: memoryRecall,
+      onCatalog: () => void this.loadCatalog(), onList: (query, includeForgotten) => void this.loadMemoryList(query, includeForgotten),
+      onJobs: () => void this.runMemoryCommand('jobs', {}),
+      onRemember: (value) => void this.runMemoryCommand('remember', { text: value.text, kind: value.kind, subject: value.subject }),
+      onEdit: (record) => { this.memory.editDraft = { id: record.id, expected_revision: record.revision, text: record.text, kind: record.kind, subject: record.subject }; this.renderInspector(true); },
+      onUpdate: (value) => void this.runMemoryCommand('update', value),
+      onCancelEdit: () => { this.memory.editDraft = null; this.renderInspector(true); },
+      onRebase: (record) => { if (this.memory.editDraft?.id === record.id) { this.memory.editDraft.expected_revision = record.revision; this.renderInspector(true); } },
+      onForget: (record) => void this.runMemoryCommand('forget', { id: record.id, expected_revision: record.revision }),
+      onDelete: (record) => void this.deleteMemoryRecord(record),
+    });
+    this.inspectorBody.replaceChildren(view);
+    this.inspectorBody.setAttribute('aria-labelledby', `${this.inspectorTab}-tab`);
     this.inspectorBody.scrollTop = scroll;
+  }
+
+  resetMemoryScope(sessionId = null) {
+    this.memoryController?.abort();
+    this.memoryController = null;
+    ++this.memoryGeneration; ++this.memoryRequestSequence;
+    this.memoryEntryPending = null;
+    const summary = this.sessions.find((session) => session.id === sessionId);
+    this.memory = createMemoryView(sessionId, summary?.domain ?? null);
+  }
+
+  memoryExtension() {
+    const fromCatalog = this.catalog?.extensions?.find((extension) => (extension.id ?? extension.name) === 'memory');
+    const fromSnapshot = this.state?.extensions?.find((extension) => extension.id === 'memory');
+    return fromCatalog ?? (!this.catalog ? fromSnapshot : null);
+  }
+
+  enterMemoryManagement() {
+    this.memoryEntryPending = this.selection;
+    this.maybeLoadEnteredMemory();
+  }
+
+  maybeLoadEnteredMemory() {
+    if (this.disposed || this.inspectorTab !== 'memory' || this.memoryEntryPending !== this.selection
+      || !this.activeId || !this.state || this.state.sessionId !== this.activeId || this.catalogLoading) return;
+    this.memoryEntryPending = null;
+    if (this.memory.status === 'idle' || this.memory.status === 'error') void this.loadMemoryList(this.memory.query, this.memory.includeForgotten);
+  }
+
+  async loadMemoryList(query = this.memory.query, includeForgotten = this.memory.includeForgotten) {
+    this.memory.query = String(query ?? '').slice(0, 1000);
+    this.memory.includeForgotten = Boolean(includeForgotten);
+    return this.runMemoryCommand('list', { query: this.memory.query, limit: 50, include_forgotten: this.memory.includeForgotten });
+  }
+
+  async runMemoryCommand(command, argumentsValue, { write = ['remember', 'update', 'forget', 'delete', 'clear'].includes(command) } = {}) {
+    const view = this.memory; const id = this.activeId; const selection = this.selection; const generation = this.memoryGeneration;
+    const state = this.state; const extension = this.memoryExtension();
+    const installed = this.catalog ? Boolean(this.catalog.extensions?.some((item) => (item.id ?? item.name) === 'memory')) : Boolean(extension);
+    if (!this.identity.is_admin || this.disposed || !id || !state || state.sessionId !== id || view.sessionId !== id || !installed || view.busy) return;
+    if (!Array.isArray(extension?.commands) || !extension.commands.includes(command)) {
+      view.error = { kind: 'unsupported', message: '宿主未声明此记忆管理命令；不会发送请求。' }; this.renderInspector(true); return;
+    }
+    if (!Number.isInteger(state.configRevision) || state.configRevision < 0) {
+      view.error = { kind: 'protocol', message: '当前会话缺少有效配置修订号，无法安全提交扩展命令。' }; this.renderInspector(true); return;
+    }
+    const controller = new AbortController(); const requestSequence = ++this.memoryRequestSequence;
+    this.memoryController = controller;
+    const current = () => this.current(id, selection) && generation === this.memoryGeneration && requestSequence === this.memoryRequestSequence
+      && this.memoryController === controller && this.memory.sessionId === id;
+    const signal = AbortSignal.any([this.abort.signal, controller.signal]);
+    const body = { request_id: crypto.randomUUID(), expected_revision: state.configRevision, arguments_json: JSON.stringify(argumentsValue) };
+    view.busy = command; view.error = null; view.notice = null;
+    if (command === 'list') view.status = 'loading';
+    if (command === 'jobs') { view.jobsStatus = 'loading'; view.jobsError = null; }
+    this.renderInspector(true);
+    try {
+      const response = await this.api.extensionCommand(id, 'memory', command, body, signal);
+      if (!current()) return;
+      const result = parseMemoryResult(command, response.result);
+      if (command === 'list') {
+        view.records = result.records; view.scopeRevision = result.revision; view.loadedQuery = argumentsValue.query;
+        view.loadedIncludeForgotten = argumentsValue.include_forgotten; view.status = 'loaded';
+        view.requiresRefresh = false; view.dirtyAfterWrite = false; view.error = null; view.notice = null;
+      } else if (command === 'jobs') {
+        view.jobs = result.jobs; view.jobsStatus = 'loaded'; view.jobsError = null;
+      } else if (command === 'remember' || command === 'update' || command === 'forget') {
+        const record = result.record;
+        const matches = !view.loadedQuery || `${record.text} ${record.subject} ${record.kind}`.toLocaleLowerCase().includes(view.loadedQuery.toLocaleLowerCase());
+        if (command === 'forget' && !view.loadedIncludeForgotten) view.records = view.records.filter((item) => item.id !== record.id);
+        else if (matches) {
+          const index = view.records.findIndex((item) => item.id === record.id);
+          if (index < 0) view.records = [...view.records, record];
+          else view.records = view.records.map((item) => item.id === record.id ? record : item);
+        } else view.records = view.records.filter((item) => item.id !== record.id);
+        if (command === 'remember') view.newDraft = { text: '', kind: 'fact', subject: 'conversation' };
+        if (command === 'update' && view.editDraft?.id === record.id) view.editDraft = null;
+        view.dirtyAfterWrite = true;
+        view.notice = { tone: 'success', message: command === 'remember' ? '记忆已保存到扩展副本。'
+          : command === 'update' ? `记忆已按修订 r${record.revision} 更新。` : '已停止召回；原始聊天与工具记录不受影响。' };
+      } else if (command === 'delete' || command === 'clear') {
+        view.records = view.records.filter((item) => item.id !== argumentsValue.id);
+        if (view.editDraft?.id === argumentsValue.id) view.editDraft = null;
+        view.dirtyAfterWrite = true;
+        view.notice = { tone: 'success', message: result.notice || '已删除扩展副本；原始记录未更改。' };
+      }
+    } catch (error) {
+      if (!current() || signal.aborted || this.handleUnauthorized(error)) return;
+      const message = error.kind === 'conflict' && write
+        ? '记忆修订冲突。你的输入已保留；请刷新当前记录后再决定如何编辑，不会强行覆盖。'
+        : write && ['network', 'server', 'protocol'].includes(error.kind)
+          ? '未能确认写入结果。为避免重复副作用，不会自动重发；请手动刷新记录核对。'
+          : error.message;
+      if (write && (error.kind === 'conflict' || ['network', 'server', 'protocol'].includes(error.kind))) view.requiresRefresh = true;
+      if (command === 'list') view.status = 'error';
+      if (command === 'jobs') { view.jobsStatus = 'error'; view.jobsError = { kind: error.kind, message }; }
+      else view.error = { kind: error.kind, message };
+    } finally {
+      if (current()) {
+        view.busy = null; this.memoryController = null; this.renderInspector(true);
+      }
+    }
+  }
+
+  async deleteMemoryRecord(record) {
+    const id = this.activeId; const selection = this.selection; const generation = this.memoryGeneration;
+    if (!this.identity.is_admin || !this.current(id, selection) || !record?.id) return;
+    const confirmed = await confirmAction({
+      title: '删除这条记忆副本？',
+      description: '仅清除 memory 扩展保存的副本；不会删除 JSONL 聊天/工具历史、云模型副本或外部备份。此操作不可撤销。',
+      confirmLabel: '确认删除扩展副本', danger: true,
+    });
+    if (!confirmed || !this.current(id, selection) || generation !== this.memoryGeneration) return;
+    await this.runMemoryCommand('delete', { id: record.id, expected_revision: record.revision });
   }
 
   openProviderManager() {
@@ -484,6 +643,7 @@ export class Workspace {
     finally {
       if (!this.disposed) {
         this.catalogLoading = false; this.renderInspector();
+        this.maybeLoadEnteredMemory();
         if (this.catalogRefreshQueued) void this.loadCatalog();
       }
     }
@@ -557,11 +717,14 @@ export class Workspace {
   }
 
   setInspectorTab(tab) {
+    if (!['overview', 'settings', 'memory'].includes(tab)) return;
     this.inspectorTab = tab;
-    this.overviewTab.setAttribute('aria-selected', String(tab === 'overview')); this.overviewTab.tabIndex = tab === 'overview' ? 0 : -1;
-    this.settingsTab.setAttribute('aria-selected', String(tab === 'settings')); this.settingsTab.tabIndex = tab === 'settings' ? 0 : -1;
-    this.inspectorBody.setAttribute('aria-labelledby', tab === 'overview' ? 'overview-tab' : 'settings-tab');
+    for (const [name, control] of [['overview', this.overviewTab], ['settings', this.settingsTab], ['memory', this.memoryTab]]) {
+      control.setAttribute('aria-selected', String(tab === name)); control.tabIndex = tab === name ? 0 : -1;
+    }
+    this.inspectorBody.setAttribute('aria-labelledby', `${tab}-tab`);
     this.inspectorRenderKey = ''; this.renderInspector(true); this.inspectorBody.scrollTop = 0;
+    if (tab === 'memory') this.enterMemoryManagement();
   }
   openSettings() { this.setInspectorTab('settings'); this.toggleInspector(true); }
   toggleSidebar(open) {
@@ -613,6 +776,7 @@ export class Workspace {
   dispose() {
     if (this.disposed) return;
     this.disposed = true; ++this.selection; ++this.listGeneration;
+    this.resetMemoryScope();
     this.abort.abort(); this.stream.dispose(); clearTimeout(this.approvalExpiryTimer);
     this.providerManager?.dispose(); this.providerManager = null;
     this.api.clearCredentials(); this.composers.clear(); this.drafts.clear();

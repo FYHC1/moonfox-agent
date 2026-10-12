@@ -98,7 +98,7 @@ test('configuration catalog controls save full CAS settings; conflict requires e
   await page.getByRole('button', { name: '保存会话配置', exact: true }).click();
   const response = await saved; const dto = requestBody(response.request());
   expect(dto.expected_revision).toBe(0);
-  expect(Object.keys(dto.settings).sort()).toEqual(['allowed_tools', 'approval_tools', 'enabled_extensions', 'generation', 'max_requests_per_input', 'max_tokens_per_input', 'max_turns_per_run', 'model_id', 'run_timeout_seconds', 'thinking_level']);
+  expect(Object.keys(dto.settings).sort()).toEqual(['allowed_tools', 'approval_tools', 'enabled_extensions', 'extension_config', 'generation', 'max_requests_per_input', 'max_tokens_per_input', 'max_turns_per_run', 'model_id', 'run_timeout_seconds', 'thinking_level']);
   expect(dto.settings.approval_tools).toEqual(['echo']);
   await expect(page.locator('.settings-footer')).toContainText('已保存 r1');
   await waitLive(page);
@@ -207,7 +207,7 @@ test('mobile drawers trap focus, long content reflows, QQ is read-only, reduced-
   await page.getByRole('button', { name: '会话详情', exact: true }).click();
   await expect(page.locator('#inspector')).toHaveAttribute('aria-modal', 'true');
   await page.getByRole('tab', { name: '概览', exact: true }).focus(); await page.keyboard.press('End');
-  await expect(page.getByRole('tab', { name: '配置', exact: true })).toBeFocused();
+  await expect(page.getByRole('tab', { name: '记忆', exact: true })).toBeFocused();
   for (let i = 0; i < 24; i++) { await page.keyboard.press('Tab'); expect(await page.evaluate(() => document.querySelector('#inspector').contains(document.activeElement))).toBeTruthy(); }
   await page.keyboard.press('Escape'); await expect(page.getByRole('button', { name: '会话详情', exact: true })).toBeFocused();
   await page.emulateMedia({ reducedMotion: 'reduce' });

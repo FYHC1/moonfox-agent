@@ -110,3 +110,15 @@ class ServerHub(Protocol):
     async def set_default_model(
         self, principal: Principal, identity: str, *, expected_revision: int
     ) -> dict[str, Any]: ...
+
+    async def extension_command(
+        self,
+        principal: Principal,
+        session_id: str,
+        extension_id: str,
+        *,
+        command: str,
+        arguments_json: str,
+        expected_revision: int,
+        request_id: str,
+    ) -> dict[str, Any]: ...

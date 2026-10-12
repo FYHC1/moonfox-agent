@@ -75,6 +75,29 @@
     },
     "ConfigView": {
       "$defs": {
+        "ExtensionConfiguration": {
+          "additionalProperties": false,
+          "description": "JSON text keeps nested extension data immutable without importing implementations.",
+          "properties": {
+            "config_json": {
+              "default": "{}",
+              "maxLength": 32768,
+              "title": "Config Json",
+              "type": "string"
+            },
+            "extension_id": {
+              "maxLength": 100,
+              "pattern": "^[a-z][a-z0-9_-]*$",
+              "title": "Extension Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "extension_id"
+          ],
+          "title": "ExtensionConfiguration",
+          "type": "object"
+        },
         "GenerationParameters": {
           "additionalProperties": false,
           "properties": {
@@ -252,6 +275,15 @@
                 "type": "string"
               },
               "title": "Enabled Extensions",
+              "type": "array"
+            },
+            "extension_config": {
+              "default": [],
+              "items": {
+                "$ref": "#/$defs/ExtensionConfiguration"
+              },
+              "maxItems": 32,
+              "title": "Extension Config",
               "type": "array"
             },
             "generation": {
@@ -467,6 +499,56 @@
       "title": "ErrorResponse",
       "type": "object"
     },
+    "ExtensionCommand": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "arguments_json": {
+          "default": "{}",
+          "maxLength": 32768,
+          "title": "Arguments Json",
+          "type": "string"
+        },
+        "expected_revision": {
+          "minimum": 0,
+          "title": "Expected Revision",
+          "type": "integer"
+        },
+        "request_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Request Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "request_id",
+        "expected_revision"
+      ],
+      "title": "ExtensionCommand",
+      "type": "object"
+    },
+    "ExtensionCommandResult": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "request_id": {
+          "title": "Request Id",
+          "type": "string"
+        },
+        "result_json": {
+          "maxLength": 1048576,
+          "title": "Result Json",
+          "type": "string"
+        }
+      },
+      "required": [
+        "request_id",
+        "result_json"
+      ],
+      "title": "ExtensionCommandResult",
+      "type": "object"
+    },
     "ExtensionView": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
@@ -477,6 +559,38 @@
           },
           "title": "Capabilities",
           "type": "array"
+        },
+        "commands": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Commands",
+          "type": "array"
+        },
+        "config_schema": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Config Schema"
+        },
+        "default_config_json": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Default Config Json"
         },
         "enabled": {
           "title": "Enabled",
@@ -489,6 +603,13 @@
         "scope": {
           "title": "Scope",
           "type": "string"
+        },
+        "tools": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Tools",
+          "type": "array"
         },
         "version": {
           "title": "Version",
@@ -1994,6 +2115,29 @@
           "title": "ApprovalView",
           "type": "object"
         },
+        "ExtensionConfiguration": {
+          "additionalProperties": false,
+          "description": "JSON text keeps nested extension data immutable without importing implementations.",
+          "properties": {
+            "config_json": {
+              "default": "{}",
+              "maxLength": 32768,
+              "title": "Config Json",
+              "type": "string"
+            },
+            "extension_id": {
+              "maxLength": 100,
+              "pattern": "^[a-z][a-z0-9_-]*$",
+              "title": "Extension Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "extension_id"
+          ],
+          "title": "ExtensionConfiguration",
+          "type": "object"
+        },
         "ExtensionView": {
           "additionalProperties": false,
           "properties": {
@@ -2003,6 +2147,38 @@
               },
               "title": "Capabilities",
               "type": "array"
+            },
+            "commands": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Commands",
+              "type": "array"
+            },
+            "config_schema": {
+              "anyOf": [
+                {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Config Schema"
+            },
+            "default_config_json": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Default Config Json"
             },
             "enabled": {
               "title": "Enabled",
@@ -2015,6 +2191,13 @@
             "scope": {
               "title": "Scope",
               "type": "string"
+            },
+            "tools": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Tools",
+              "type": "array"
             },
             "version": {
               "title": "Version",
@@ -2307,6 +2490,15 @@
               "title": "Enabled Extensions",
               "type": "array"
             },
+            "extension_config": {
+              "default": [],
+              "items": {
+                "$ref": "#/$defs/ExtensionConfiguration"
+              },
+              "maxItems": 32,
+              "title": "Extension Config",
+              "type": "array"
+            },
             "generation": {
               "$ref": "#/$defs/GenerationParameters"
             },
@@ -2565,6 +2757,29 @@
     },
     "UpdateConfig": {
       "$defs": {
+        "ExtensionConfiguration": {
+          "additionalProperties": false,
+          "description": "JSON text keeps nested extension data immutable without importing implementations.",
+          "properties": {
+            "config_json": {
+              "default": "{}",
+              "maxLength": 32768,
+              "title": "Config Json",
+              "type": "string"
+            },
+            "extension_id": {
+              "maxLength": 100,
+              "pattern": "^[a-z][a-z0-9_-]*$",
+              "title": "Extension Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "extension_id"
+          ],
+          "title": "ExtensionConfiguration",
+          "type": "object"
+        },
         "GenerationParameters": {
           "additionalProperties": false,
           "properties": {
@@ -2699,6 +2914,15 @@
               "title": "Enabled Extensions",
               "type": "array"
             },
+            "extension_config": {
+              "default": [],
+              "items": {
+                "$ref": "#/$defs/ExtensionConfiguration"
+              },
+              "maxItems": 32,
+              "title": "Extension Config",
+              "type": "array"
+            },
             "generation": {
               "$ref": "#/$defs/GenerationParameters"
             },
@@ -2777,6 +3001,29 @@
     },
     "UpdateHostConfig": {
       "$defs": {
+        "ExtensionConfiguration": {
+          "additionalProperties": false,
+          "description": "JSON text keeps nested extension data immutable without importing implementations.",
+          "properties": {
+            "config_json": {
+              "default": "{}",
+              "maxLength": 32768,
+              "title": "Config Json",
+              "type": "string"
+            },
+            "extension_id": {
+              "maxLength": 100,
+              "pattern": "^[a-z][a-z0-9_-]*$",
+              "title": "Extension Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "extension_id"
+          ],
+          "title": "ExtensionConfiguration",
+          "type": "object"
+        },
         "GenerationParameters": {
           "additionalProperties": false,
           "properties": {
@@ -2954,6 +3201,15 @@
                 "type": "string"
               },
               "title": "Enabled Extensions",
+              "type": "array"
+            },
+            "extension_config": {
+              "default": [],
+              "items": {
+                "$ref": "#/$defs/ExtensionConfiguration"
+              },
+              "maxItems": 32,
+              "title": "Extension Config",
               "type": "array"
             },
             "generation": {

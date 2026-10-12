@@ -1,8 +1,29 @@
 """Configuration snapshots. Secrets are never values in this public schema."""
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+import json
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .providers import MODEL_ID_MAX_LENGTH, GenerationParameters
+
+
+class ExtensionConfiguration(BaseModel):
+    """JSON text keeps nested extension data immutable without importing implementations."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    extension_id: str = Field(pattern=r"^[a-z][a-z0-9_-]*$", max_length=100)
+    config_json: str = Field(default="{}", max_length=32768)
+
+    @field_validator("config_json")
+    @classmethod
+    def valid_object(cls, value: str) -> str:
+        parsed = json.loads(value)
+        if not isinstance(parsed, dict):
+            raise ValueError("Extension configuration must be a JSON object")
+        return json.dumps(
+            parsed, ensure_ascii=False, allow_nan=False, sort_keys=True, separators=(",", ":")
+        )
 
 
 class SessionSettings(BaseModel):
@@ -18,6 +39,7 @@ class SessionSettings(BaseModel):
     approval_tools: tuple[str, ...] = ()
     enabled_extensions: tuple[str, ...] = ()
     generation: GenerationParameters = Field(default_factory=GenerationParameters)
+    extension_config: tuple[ExtensionConfiguration, ...] = Field(default=(), max_length=32)
 
     @model_validator(mode="after")
     def check_consistency(self) -> "SessionSettings":
@@ -30,6 +52,9 @@ class SessionSettings(BaseModel):
                 not value or len(value) > 100 for value in values
             ):
                 raise ValueError("Tool and extension identifiers must be nonempty and unique")
+        identifiers = [item.extension_id for item in self.extension_config]
+        if len(identifiers) != len(set(identifiers)):
+            raise ValueError("Duplicate extension configuration")
         return self
 
 

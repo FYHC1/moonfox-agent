@@ -206,6 +206,7 @@ class SessionExtensionManager(LifecycleManager):
         grants: Mapping[str, frozenset[str]] | None = None,
         timeout: float = 5.0,
         ensure_idle: Callable[[], None] | None = None,
+        allowed_tools: frozenset[str] | None = None,
     ) -> None:
         super().__init__(
             registry,
@@ -216,6 +217,7 @@ class SessionExtensionManager(LifecycleManager):
             ensure_idle=ensure_idle,
         )
         self._actions = actions
+        self._allowed_tools = allowed_tools
         self._registrations = SessionRegistrations()
         self._dispatcher = Dispatcher(timeout=timeout, diagnose=self._diagnostics.append)
 
@@ -243,7 +245,11 @@ class SessionExtensionManager(LifecycleManager):
         return tuple(item for item in contributions.items if item.owner.phase == "active")
 
     def tools(self) -> tuple[AgentTool, ...]:
-        return tuple(item.value for item in self._snapshot(self._registrations.tools))
+        return tuple(
+            item.value
+            for item in self._snapshot(self._registrations.tools)
+            if self._allowed_tools is None or item.value.name in self._allowed_tools
+        )
 
     async def notify(self, event: SessionEvent) -> None:
         handlers = tuple(

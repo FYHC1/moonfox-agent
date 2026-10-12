@@ -6,6 +6,8 @@ Moonfox 的 headless 会话运行时与可信本地扩展宿主，Python ≥ 3.1
 
 阶段 D 已增加持久 SessionHub、durable inbox/outbox、配置/身份/审批与计量，以及可选 HTTP/WS server；基础管理补充提供持久多提供商/模型目录与参数配置。`create_application(home=..., models={})` 可从空目录开始，通过同一 Hub API 管理配置；WebUI/headless/后续 QQ 共用，不在渠道扩展内另配模型。安装 `moonfox-app[server,providers]` 可运行真实 HTTP 协议，普通安装仍无 httpx/Web 依赖。启动与限制见 [阶段 D](../../docs/moonfox/STAGE-D.md) 和 [提供商管理](../../docs/moonfox/PROVIDER-MANAGEMENT.md)。
 
+阶段 E 新增通用受管会话扩展定义、不可变配置、绑定范围的管理命令与计量模型端口。`moonfox-ext-persona` / `moonfox-ext-memory` 是另外安装的独立包，普通应用仍不依赖它们。实际启用和删除边界见 [阶段 E](../../docs/moonfox/STAGE-E.md)。
+
 ## Headless 使用
 
 ```python
@@ -44,7 +46,7 @@ async def demo():
 `SessionManager` 提供低层 `preview` / `commit_preview` / `commit` / `select_leaf`；`AgentSession` 包装公开 Agent 钩子。低层 manager/store 属于可信装配代码，不应在活动会话外并发写入，也不授予普通扩展。
 
 - entry 从开始就有 `id`、`parent_id`、timestamp。模型完成消息使用核心 `message_id` 作为 entry ID，不依赖 Python 对象身份。
-- `HeaderEntry` 绑定不可变 `SessionBinding(session_id, scope_id)`，恢复必须完全匹配。runtime 只认识 opaque scope；阶段 D services 已提供身份与 domain/route/scope 结构映射。当前没有记忆数据库，完整跨域记忆验收属于阶段 E。
+- `HeaderEntry` 绑定不可变 `SessionBinding(session_id, scope_id)`，恢复必须完全匹配。runtime 只认识 opaque scope；阶段 D services 提供身份与 domain/route/scope 映射，E 经 `ExtensionResources` 注入绑定域与目录，由独立记忆包维护带 domain/scope 约束的数据库。
 - 原始 entry 永不因压缩或 context edit 删除。投影沿 active leaf 回溯；导航到旧 leaf 后可继续形成分支，leaf 选择持久化。
 - 压缩保留重放后的 prompt/sections/工具基线与完整工具配对；摘要作为 user 内容，不伪造 assistant 回答。新摘要可替换过期事实，不要求无限累加。
 - 普通 namespaced custom entry 无扩展也可读取，payload 原样保留；`context_required=True` 必须提供显式 codec，否则拒绝建立上下文。codec 只允许输出 user 参考数据，不可注入系统/工具身份。
@@ -81,11 +83,20 @@ I/O 失败尝试回滚整个未成功批次；回滚本身失败时 store 标记
 - 扩展 boundary 的 continue 共用当前 run 预算。命令入口必须注入授权回调。**工具默认拒绝**：未注入宿主 `permission_checker` 不执行；权限用校验/参数准备后的实际 args，顶层和嵌套工具走相同强制检查，扩展只能进一步限制，不能覆盖宿主拒绝。
 - 后台工作使用 `TaskService.submit(name, work_factory, timeout=...)`，不留下无主 `create_task`。阻塞同步代码和忽略取消的任务不能被 asyncio 安全强制终止；可信本地 Python 插件不是沙箱。
 
+### 受管会话扩展（阶段 E）
+
+- `create_application(..., session_extensions=(...))` 接受显式的 `SessionExtensionDefinition`，包含 manifest、工厂、配置 schema/默认值、工具名与 JSON 管理命令；`ExtensionRegistry.fork()` 为每个会话绑定工厂，不污染共享注册表。
+- `SessionSettings.extension_config` 为 `ExtensionConfiguration(extension_id, config_json)` 元组，通过现有会话配置 CAS 保存，限制 JSON 大小/类型并由具体扩展验证。配置更新不打断当前 run，在空闲或运行收尾边界释放旧实例；下个 run 重读最新修订。
+- `ExtensionResources(binding, domain, data_dir, models)` 由已完成授权/路由的宿主创建；记忆目录是 `home/extensions/memory/{domain}/{sha256(scope_id)}`。扩展管理只能操作该绑定，不接受参数覆盖域/会话，不直接暴露全局宿主数据库。
+- `hub.extension_command(principal, session_id, extension_id, *, command, arguments_json, expected_revision, request_id)` 要求管理员；`expected_revision` 是会话配置修订，记录的 CAS 修订在 JSON 参数中独立传递。管理可访问已停用扩展的数据，但不启动 runtime、模型或聊天输入，资源 `models=None`。
+- manifest 必须声明 `models` 才能获得 `MeteredModelService`。`current_ticket()` 返回本次 logical input 的票据，`complete(ticket, *, system, text, max_tokens)` 验证绑定会话，使用共享目录/并发网关及原输入持久预算；作业恢复不得借用新输入额度。请求不带工具，旧端口在关闭时撤销。
+- 扩展工具声明按宿主 allowlist 过滤，执行仍走强制权限链。CLI `--extension persona --extension memory` 只登记已安装包，不自动启用会话、工具权限或后台抽取。完整组合示例：`examples/persona_memory.py`。
+
 ## 阶段边界与检查
 
-阶段 D 与管理补充已实现应用服务、独立 WebUI、OpenAI Chat Completions/Responses/Anthropic Messages 协议适配；人设/记忆/QQ 具体业务扩展仍未实现。模型 ID 支持 `-`、`.` 与大小写/中文，新建可省略 `hub.put_model` 的 identity，由共享目录按名称、提供商前缀和序号生成；编辑显示名称不更改已有 ID。Web 框架通过可选 `server` extra、httpx 通过 `providers` extra 安装；headless 不需要前端构建或 Web 依赖，也可注入自己的传输。
+阶段 D 与管理补充已实现应用服务、独立 WebUI、OpenAI Chat Completions/Responses/Anthropic Messages 协议适配；阶段 E 已实现独立人设/记忆扩展，QQ 协议客户端留在 F。模型 ID 支持 `-`、`.` 与大小写/中文，新建可省略 `hub.put_model` 的 identity，由共享目录按名称、提供商前缀和序号生成；编辑显示名称不更改已有 ID。Web 框架通过可选 `server` extra、httpx 通过 `providers` extra 安装；headless 不需要前端构建或 Web 依赖，也可注入自己的传输。
 
-根 `python scripts/check.py --installation --web` 检查 Ruff、格式、strict mypy、确定性测试、协议导出一致性、三个包 sdist → wheel、五个干净环境安装、仓库外示例与前端测试/构建。`--web` 需先在 packages/web-ui 执行 npm ci；省略则仅检查 Python。当前实际验证环境为 Windows / Python 3.14.8，未单独实测最低 Python 3.12。
+根 `python scripts/check.py --installation --web` 检查 Ruff、格式、strict mypy、确定性测试、协议导出一致性、五个包 sdist → wheel、七个干净环境安装、七个仓库外示例与前端测试/构建。`--web` 需先在 packages/web-ui 执行 npm ci；省略则仅检查 Python。当前实际验证环境为 Windows / Python 3.14.8，未单独实测最低 Python 3.12。
 
 ## Headless 管理共享目录
 

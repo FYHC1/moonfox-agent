@@ -1,7 +1,7 @@
 # Moonfox 接口设计：核心与扩展契约
 
 > 当前有效设计，替代 [历史草案](history/DESIGN-v1.md)。整体边界与目录以 [ARCHITECTURE.md](ARCHITECTURE.md) 为准。
-> 下列签名覆盖完整实施路线；阶段 A–D 的核心、运行时/扩展、应用服务/配置授权与 HTTP/WS 子集以公开 API 和测试为准。具体业务扩展仍是后续拟定契约。阶段 D 实际能力与限制见 [STAGE-D.md](STAGE-D.md)。
+> 下列契约覆盖完整实施路线；阶段 A–E 的已实现子集以公开 API 和测试为准。QQ 仍是阶段 F 的拟定契约。实际能力与限制见 [阶段 D](STAGE-D.md)、[提供商管理](PROVIDER-MANAGEMENT.md) 和 [阶段 E](STAGE-E.md)。
 
 ## 1. 包归属、公开 API 与可移植性
 
@@ -171,35 +171,25 @@ SessionStore 位于 moonfox-app 的 runtime/storage，是可替换的接口，�
 ### 5.1 人设扩展
 
 - 保存人设版本、身份/语气/示例，默认人设内回答；不更改核心 Assistant 类型。
-- 通过 prompt section provider 提供 namespaced section，变更下次安全请求边界生效。
+- 通过 prompt section provider 提供 `persona.identity`，携带修订/SHA256 并保存 `persona.profile` 元数据；配置变更不打断当前 run，在空闲或运行收尾边界释放旧实例，下个 run 使用新配置。
 - 人设可共用静态模板，但关系状态/用户画像不跨记忆域。
 - 人设表达不能伪造工具成功、自动提升权限或掩盖重要操作失败。
 
 ### 5.2 记忆扩展
 
-记忆扩展拥有 SQLite、迁移、FTS/可选向量、抽取工作器和记忆工具；业务包负责作用域授权并在工厂中配置扩展。runtime 不创建 memory 表，也不直接 import 或调用具体扩展的 retrieve。
+记忆扩展拥有 SQLite、迁移、字面关键词/ngram 索引、抽取工作器和记忆工具；业务包负责作用域授权并在工厂中配置扩展。runtime 不创建 memory 表，也不直接 import 或调用具体扩展的 retrieve。首版不实现 FTS 表达式、向量或语义召回。
 
-宿主提供不可变 SessionBinding 并授权绑定作用域的存储 handle：
-
-~~~python
-@dataclass(frozen=True, slots=True)
-class MemoryScope:
-    domain: Literal["qq", "agent"]
-    scope_id: str
-
-class ScopedMemoryStore(Protocol):
-    async def search(self, query: str, limit: int) -> list[MemoryRecord]: ...
-    async def remember(self, candidate: MemoryCandidate) -> str: ...
-    async def forget(self, memory_id: str) -> None: ...
-~~~
+宿主注入 `ExtensionResources(binding, domain, data_dir, models)`。扩展创建不可变 `MemoryScope(domain, scope_id)` 与只读绑定的 `ScopedMemoryStore`；目录按域/范围拆分，但所有 SQL 仍带 domain/scope 过滤和复合约束。实际公共类型与方法以 `moonfox_ext_memory.api` 为准，不要求宿主导入其私有数据库实现。
 
 MemoryScope 属于记忆扩展；域授权由应用服务维护，runtime 只认识注入的 opaque scope handle。模型和前端不能传 domain 覆盖 scope。SQL 的 search/update/delete、工具直接读 ID、候选合并、索引与缓存均检查绑定域和会话范围。数据库用 CHECK/复合约束辅助，不能把 NOT NULL 当作完整隔离证明。
 
-agent_settled 只创建幂等抽取作业，不在事件处理器等待第二次 LLM 调用。作业包含域、会话、entry 范围、版本和去重键，通过宿主计量服务执行。候选事实带来源、置信度和撤销路径，不把群友声称当作操作者事实，也不让模型自由改写权限。
+`agent_settled` 只登记幂等抽取作业，不在通知处理器里等待第二次 LLM 调用。默认 `extraction=off`；显式开启后仅发送选定的真实 user entry，不发送旧历史/system/tool/reasoning。候选固定 subject=conversation，来源由作业绑定、置信度上限 0.6，不把群友声称当作操作者事实。
 
-检索有硬 token 上限；偏好不能无限置顶绕过预算。FTS trigram 是字面匹配，不等于语义召回；用中文关键词/ngram 查询构造及实测用例评估，必要时加 embedding，不复用旧草案中未经结果支持的命中断言。
+作业在 SQLite schema 2 中保存原 logical input 的预算票据；恢复 pending 仍用原票据，不借用当前输入预算。遗留 running 恢复 unknown，不重放不明调用；确定的调用前预算拒绝为 failed。最多 4 个受管工作器，停止时不再调度新任务。凭据在宿主请求启动时冻结，不写入作业库。
 
-“忘记”区分不再召回与彻底删除：后者需处理记录、画像、索引、快照、抽取待办、可恢复副本和备份保留策略。首版不开放自动 QQ↔Agent 记忆复制。
+检索有硬参考 token 上限（项目估算口径）；偏好不能无限置顶绕过预算。英文词与 CJK 2–3 字 n-gram 是字面匹配，不等于语义召回。缓存含范围、输入/投影和存储修订；最多 200 个召回快照保存实际选中记录/版本与注入文本，不污染规范 transcript。
+
+“遗忘”阻止未来召回和模型 `get`，管理员仍可显式查看；“删除/清空扩展副本”清理记录、索引、快照、作业原文，并以失效代次拒绝旧结果复活。两者不擦除 JSONL 原聊天、已产生的工具结果/模型复述、远端副本、备份或当前请求上下文。完整保留策略在 G；首版不开放自动 QQ↔Agent 记忆复制。
 
 ### 5.3 QQ 宿主扩展
 
@@ -215,6 +205,8 @@ agent_settled 只创建幂等抽取作业，不在事件处理器等待第二次
 - 最终回复经宿主 ReplyEnvelope 进入 outbox；已持久化的 outbox 由宿主 worker 按授权 transport 派发，不让 agent_settled 监听器等待网络发送。
 - 卸载 QQ 扩展停止接收新输入、关闭连接并暂停待发 outbox；不影响 WebUI 和独立 Agent 会话。
 
+[qq-bridge 调研](QQ-BRIDGE-REFERENCE.md) 可借鉴引用归属/负缓存、群触发与有界合并、发送时权限复检、结构化分段和健康分层；不采用其 DSH/SDK/MCP 单体桥接或非持久队列，不将其测试描述当本项目联调结论。
+
 ### 5.4 WebUI 与应用服务
 
 前端为 packages/web-ui；服务端为 moonfox-app 内部的 server。它们通过 HTTP/WS 协议交互，不共享 Python 私有对象。业务包内的 api.py 提供 headless 入口，server 只是使用这些服务的另一种入口。
@@ -225,7 +217,7 @@ agent_settled 只创建幂等抽取作业，不在事件处理器等待第二次
 | 停止/重试/压缩 | 发送明确命令、展示状态 | 判定命令合法性、取消收敛、恢复与预算策略 |
 | 配置/扩展管理 | 表单、校验提示、状态展示 | schema 校验、修订冲突、持久化、加载/卸载、权限授予 |
 | 工具审批 | 显示审批项、提交用户决定 | 审批人与作用域校验、超时、单次生效、审计 |
-| 记忆管理 | 用户选择域、显示经授权的数据 | 绑定真实域、访问校验、调用限定扩展能力、删除传播 |
+| 记忆管理 | 选择当前会话、显示绑定域与经授权数据；无 domain 覆盖参数 | 绑定真实域、访问校验、调用限定扩展能力、删除传播 |
 
 前端可做即时输入校验，但后端必须重新校验；浏览器不得判断“工具已经获准”后直接执行动作。WebUI 管理入口的数据不能自动并入 agent 域模型上下文。
 
@@ -247,16 +239,18 @@ agent_settled 只创建幂等抽取作业，不在事件处理器等待第二次
 
 ### 5.6 扩展配置与 UI 资源
 
-扩展声明版本化配置 schema、可写字段和作用域，应用服务统一校验与保存。reload 使用快照/修订号，冲突时拒绝覆盖；密钥只接受引用或专门的写入接口，读接口脱敏。
+阶段 E 的 `SessionExtensionDefinition` 声明版本化配置 schema、默认 JSON、工具与管理命令。`SessionSettings.extension_config` 保存不可变 `ExtensionConfiguration(extension_id, config_json)` 元组，宿主限制大小/规范化并由扩展校验；既有配置缺省为空。更新使用会话配置修订 CAS，冲突拒绝覆盖。
 
-前端显示扩展状态（disabled/loading/ready/degraded/failed/stopping）、最近错误、权限、当前会话启用列表；使用服务端返回的授权命令和 schema 展示表单。首版不提供任意扩展前端脚本注入，也不允许运行时上传任意 Python 代码。
+管理接口为 `POST /api/v1/sessions/{id}/extensions/{extension_id}/commands/{command}`，接收 `{request_id, expected_revision, arguments_json}`，返回 `{request_id, result_json}`。要求管理员，绑定当前会话，管理资源 `models=None`；不附带 runtime、模型请求或聊天输入。会话配置 CAS 和参数中的记录 CAS 各自验证；未知网络结果不得自动重发写入。
+
+前端显示扩展状态、权限和启用列表，按服务端元数据渲染人设/记忆配置与管理。保留未知扩展配置；切换会话/退出清理草稿与迟到结果；409 保留草稿等待显式处理。不提供任意扩展前端脚本注入，也不允许运行时上传任意 Python 代码。
 
 packages/web-ui 独立构建为静态产物，可随应用发行物托管；业务包 headless 安装不要求有该产物。未提供静态产物时 server 可只提供 API。开发前端服务器不承担 SessionHub 或权限服务，浏览器只通过配置的后端地址连接。
 
 ## 6. 预算、事件与后台服务
 
 - 核心只接收通用运行预算；宿主消费 core outcome 生成 UI Notice。核心不能 emit QQ/宿主事件，也不能调用压缩策略。
-- provider 并发与速率配额按 provider/credential 分组，聊天/压缩/记忆抽取共用调度；支持排队取消、超时和 Retry-After。
+- 聊天/压缩/记忆抽取共用宿主 ModelGateway 的并发与持久 logical input 预算；计量端口校验同会话票据、原请求/token/时间额度，关闭时撤销。当前没有自动 Retry-After/重试、无限重入或金额硬预算。
 - 有界流不能无条件 put_nowait 到无限队列。单次 provider 流消费者与事件广播是不同抽象；广播为每订阅者独立缓冲并定义恢复策略。
 - message ID 在 message_start 前生成且整个生命周期稳定，不使用不断变化的内容哈希；wire 用 epoch + session_id + seq 支持断线恢复。
 - 部分文本丢失时 resync 到明确快照水位，再订阅后续 seq；不能依赖一个也被截断的 message_end 修复 UI。
@@ -278,8 +272,10 @@ packages/web-ui 独立构建为静态产物，可随应用发行物托管；业�
 
 ## 8. 状态说明
 
-阶段 A–D 已实现：独立 ai/agent；moonfox-app 的持久会话/投影/压缩和扩展管理；SessionHub、SQLite inbox/outbox/预算、配置 CAS、身份/审批、可选 HTTP/WS，以及独立中文 WebUI。CLI 仅提供离线 demo；真实 provider 网络适配、人设/记忆/QQ 具体实现仍未完成。
+阶段 A–E 已实现：独立 ai/agent；moonfox-app 的持久会话/投影/压缩和扩展管理；SessionHub、SQLite inbox/outbox/预算、配置 CAS、身份/审批、可选 HTTP/WS、共享提供商/模型与三种远端协议、独立中文 WebUI，以及独立人设/记忆扩展。CLI 只有显式 `--demo` 才使用离线回复；QQ 协议客户端与真实联调仍属于 F。
 
 阶段 C 的实际接缝：`SessionBinding(session_id, scope_id)` 由 headless 调用者注入，runtime 仅校验 opaque 绑定，完整业务授权后置；context provider 只提交带 source 的参考块，required custom context 使用显式 codec；boundary 当前允许 namespaced custom 草稿，同次预算内继续，不提供自动重试/重入。工具未配置宿主权限检查器则拒绝，使用校验后的实际参数；所有嵌套调用同链检查。摘要策略显式注入，默认不产生额外模型请求，阈值触发也有次数/超时界限。详细行为见 [应用包说明](../../packages/moonfox-app/README.md) 和 [HANDOFF.md](HANDOFF.md)，不以旧伪代码作为兼容性证明。
 
 阶段 D 使用域/路由/作用域结构字段和 owner/admin 授权，持久输入与完成事件分离；显式继续复用 logical input 预算，不自动重放 unknown。HTTP/WS schema 单源导出给前端，稳定 message ID、epoch/seq、独立有界订阅和 resync 均有验收。完整实现说明见 [STAGE-D.md](STAGE-D.md)，详细传输契约见 [STAGE-D-PROTOCOL.md](STAGE-D-PROTOCOL.md)。
+
+阶段 E 只增加 SDK/宿主通用接缝和可选业务包，不修改两个核心。停用后基础 Agent 继续运行；五包构建、七个干净安装环境、两域多会话隔离和真实本地后端的 Web 管理见 [STAGE-E.md](STAGE-E.md)。同进程 Python 扩展仍是可信代码契约，不是恶意代码沙箱。

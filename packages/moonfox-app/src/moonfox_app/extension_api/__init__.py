@@ -1,5 +1,14 @@
 """Lightweight extension SDK. No discovery, runtime imports, or startup side effects."""
 
+from moonfox_agent.api import (
+    AgentTool,
+    AgentToolResult,
+    RunOutcome,
+    ToolExecutionContext,
+    ToolUpdate,
+)
+from moonfox_ai.api import AbortSignal, TextContent, UserMessage, estimate_text_tokens
+
 from .capabilities import (
     ChannelGateway,
     HostExtension,
@@ -12,6 +21,14 @@ from .capabilities import (
     SessionExtensionPort,
     TaskHandle,
     TaskService,
+)
+from .managed import (
+    ExtensionConflictError,
+    ExtensionRecordNotFoundError,
+    ExtensionResources,
+    MeteredModelService,
+    ModelRequestRejectedError,
+    SessionExtensionDefinition,
 )
 from .types import (
     SDK_VERSION,
@@ -43,6 +60,21 @@ from .types import (
 )
 
 __all__ = [
+    "AbortSignal",
+    "AgentTool",
+    "AgentToolResult",
+    "RunOutcome",
+    "ToolExecutionContext",
+    "ToolUpdate",
+    "TextContent",
+    "UserMessage",
+    "estimate_text_tokens",
+    "ExtensionConflictError",
+    "ExtensionRecordNotFoundError",
+    "ExtensionResources",
+    "MeteredModelService",
+    "ModelRequestRejectedError",
+    "SessionExtensionDefinition",
     "SDK_VERSION",
     "BoundaryHandler",
     "BoundaryPreview",
