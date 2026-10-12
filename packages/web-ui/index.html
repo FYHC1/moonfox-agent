@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0d121c" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="description" content="Moonfox · 你的个人 Agent 工作台。会话、工具与运行状态，清晰可见。" />
+    <link rel="icon" type="image/svg+xml" href="./moonfox.svg" />
+    <link rel="stylesheet" href="./src/styles.css" />
+    <title>Moonfox · 个人 Agent 工作台</title>
+  </head>
+  <body>
+    <a class="skip-link" href="#composer-input">跳到输入框</a>
+    <div id="app">
+      <main class="boot-screen" aria-busy="true">
+        <img src="./moonfox.svg" alt="" width="48" height="48" />
+        <h1>Moonfox</h1>
+        <p>正在准备你的工作台…</p>
+        <noscript>工作台需要 JavaScript 才能连接服务端。你的任务不会因关闭页面而停止。</noscript>
+      </main>
+    </div>
+    <div id="live-region" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>

@@ -1,0 +1,1428 @@
+{
+  "protocol_version": 1,
+  "schemas": {
+    "ApprovalCommand": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "decision": {
+          "enum": [
+            "approve",
+            "deny"
+          ],
+          "title": "Decision",
+          "type": "string"
+        },
+        "request_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Request Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "request_id",
+        "decision"
+      ],
+      "title": "ApprovalCommand",
+      "type": "object"
+    },
+    "ApprovalView": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "arguments": {
+          "additionalProperties": true,
+          "title": "Arguments",
+          "type": "object"
+        },
+        "expires_at": {
+          "title": "Expires At",
+          "type": "integer"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "input_id": {
+          "title": "Input Id",
+          "type": "string"
+        },
+        "session_id": {
+          "title": "Session Id",
+          "type": "string"
+        },
+        "status": {
+          "title": "Status",
+          "type": "string"
+        },
+        "tool_name": {
+          "title": "Tool Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "session_id",
+        "input_id",
+        "tool_name",
+        "arguments",
+        "status",
+        "expires_at"
+      ],
+      "title": "ApprovalView",
+      "type": "object"
+    },
+    "ConfigView": {
+      "$defs": {
+        "HostSettings": {
+          "additionalProperties": false,
+          "properties": {
+            "approval_timeout_seconds": {
+              "default": 60,
+              "maximum": 3600,
+              "minimum": 1,
+              "title": "Approval Timeout Seconds",
+              "type": "integer"
+            },
+            "defaults": {
+              "$ref": "#/$defs/SessionSettings"
+            },
+            "event_window": {
+              "default": 256,
+              "maximum": 8192,
+              "minimum": 8,
+              "title": "Event Window",
+              "type": "integer"
+            },
+            "max_concurrent_requests": {
+              "default": 2,
+              "maximum": 32,
+              "minimum": 1,
+              "title": "Max Concurrent Requests",
+              "type": "integer"
+            },
+            "max_pending_inputs": {
+              "default": 100,
+              "maximum": 10000,
+              "minimum": 1,
+              "title": "Max Pending Inputs",
+              "type": "integer"
+            },
+            "subscriber_buffer": {
+              "default": 128,
+              "maximum": 8192,
+              "minimum": 2,
+              "title": "Subscriber Buffer",
+              "type": "integer"
+            }
+          },
+          "title": "HostSettings",
+          "type": "object"
+        },
+        "SessionSettings": {
+          "additionalProperties": false,
+          "properties": {
+            "allowed_tools": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Allowed Tools",
+              "type": "array"
+            },
+            "approval_tools": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Approval Tools",
+              "type": "array"
+            },
+            "enabled_extensions": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Enabled Extensions",
+              "type": "array"
+            },
+            "max_requests_per_input": {
+              "default": 8,
+              "maximum": 512,
+              "minimum": 1,
+              "title": "Max Requests Per Input",
+              "type": "integer"
+            },
+            "max_tokens_per_input": {
+              "default": 64000,
+              "maximum": 10000000,
+              "minimum": 1,
+              "title": "Max Tokens Per Input",
+              "type": "integer"
+            },
+            "max_turns_per_run": {
+              "default": 4,
+              "maximum": 128,
+              "minimum": 1,
+              "title": "Max Turns Per Run",
+              "type": "integer"
+            },
+            "model_id": {
+              "default": "demo",
+              "maxLength": 100,
+              "minLength": 1,
+              "title": "Model Id",
+              "type": "string"
+            },
+            "run_timeout_seconds": {
+              "default": 120,
+              "maximum": 3600,
+              "minimum": 1,
+              "title": "Run Timeout Seconds",
+              "type": "integer"
+            },
+            "thinking_level": {
+              "default": "off",
+              "maxLength": 32,
+              "minLength": 1,
+              "title": "Thinking Level",
+              "type": "string"
+            }
+          },
+          "title": "SessionSettings",
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "extensions": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Extensions",
+          "type": "array"
+        },
+        "models": {
+          "items": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "title": "Models",
+          "type": "array"
+        },
+        "revision": {
+          "title": "Revision",
+          "type": "integer"
+        },
+        "settings": {
+          "$ref": "#/$defs/HostSettings"
+        },
+        "tools": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Tools",
+          "type": "array"
+        }
+      },
+      "required": [
+        "revision",
+        "settings",
+        "models",
+        "tools",
+        "extensions"
+      ],
+      "title": "ConfigView",
+      "type": "object"
+    },
+    "ControlCommand": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "enum": [
+            "cancel",
+            "continue",
+            "compact"
+          ],
+          "title": "Action",
+          "type": "string"
+        },
+        "input_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input Id"
+        },
+        "request_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Request Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "request_id",
+        "action"
+      ],
+      "title": "ControlCommand",
+      "type": "object"
+    },
+    "CreateSession": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "request_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Request Id",
+          "type": "string"
+        },
+        "title": {
+          "default": "新对话",
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "request_id"
+      ],
+      "title": "CreateSession",
+      "type": "object"
+    },
+    "ErrorResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "detail": {
+          "title": "Detail",
+          "type": "string"
+        },
+        "error": {
+          "title": "Error",
+          "type": "string"
+        }
+      },
+      "required": [
+        "error",
+        "detail"
+      ],
+      "title": "ErrorResponse",
+      "type": "object"
+    },
+    "ExtensionView": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "capabilities": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Capabilities",
+          "type": "array"
+        },
+        "enabled": {
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "scope": {
+          "title": "Scope",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "version",
+        "scope",
+        "capabilities",
+        "enabled"
+      ],
+      "title": "ExtensionView",
+      "type": "object"
+    },
+    "InputView": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "created_at": {
+          "title": "Created At",
+          "type": "integer"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        },
+        "logical_id": {
+          "title": "Logical Id",
+          "type": "string"
+        },
+        "max_requests": {
+          "title": "Max Requests",
+          "type": "integer"
+        },
+        "request_id": {
+          "title": "Request Id",
+          "type": "string"
+        },
+        "requests_used": {
+          "title": "Requests Used",
+          "type": "integer"
+        },
+        "run_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Run Id"
+        },
+        "status": {
+          "title": "Status",
+          "type": "string"
+        },
+        "tokens_used": {
+          "title": "Tokens Used",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "request_id",
+        "run_id",
+        "logical_id",
+        "status",
+        "kind",
+        "created_at",
+        "requests_used",
+        "tokens_used",
+        "max_requests"
+      ],
+      "title": "InputView",
+      "type": "object"
+    },
+    "MessageView": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "is_error": {
+          "default": false,
+          "title": "Is Error",
+          "type": "boolean"
+        },
+        "role": {
+          "enum": [
+            "user",
+            "assistant",
+            "toolResult"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "status": {
+          "default": "complete",
+          "title": "Status",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "timestamp": {
+          "title": "Timestamp",
+          "type": "integer"
+        },
+        "tool_calls": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Tool Calls",
+          "type": "array"
+        },
+        "tool_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tool Name"
+        }
+      },
+      "required": [
+        "id",
+        "role",
+        "text",
+        "timestamp"
+      ],
+      "title": "MessageView",
+      "type": "object"
+    },
+    "Receipt": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "input_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input Id"
+        },
+        "request_id": {
+          "title": "Request Id",
+          "type": "string"
+        },
+        "run_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Run Id"
+        },
+        "session_id": {
+          "title": "Session Id",
+          "type": "string"
+        },
+        "status": {
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "request_id",
+        "session_id",
+        "status"
+      ],
+      "title": "Receipt",
+      "type": "object"
+    },
+    "SessionSummary": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "created_at": {
+          "title": "Created At",
+          "type": "integer"
+        },
+        "domain": {
+          "enum": [
+            "agent",
+            "qq"
+          ],
+          "title": "Domain",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "model_id": {
+          "title": "Model Id",
+          "type": "string"
+        },
+        "owner_id": {
+          "title": "Owner Id",
+          "type": "string"
+        },
+        "pending_count": {
+          "title": "Pending Count",
+          "type": "integer"
+        },
+        "status": {
+          "title": "Status",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "updated_at": {
+          "title": "Updated At",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "domain",
+        "owner_id",
+        "created_at",
+        "updated_at",
+        "status",
+        "pending_count",
+        "model_id"
+      ],
+      "title": "SessionSummary",
+      "type": "object"
+    },
+    "Snapshot": {
+      "$defs": {
+        "ApprovalView": {
+          "additionalProperties": false,
+          "properties": {
+            "arguments": {
+              "additionalProperties": true,
+              "title": "Arguments",
+              "type": "object"
+            },
+            "expires_at": {
+              "title": "Expires At",
+              "type": "integer"
+            },
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "input_id": {
+              "title": "Input Id",
+              "type": "string"
+            },
+            "session_id": {
+              "title": "Session Id",
+              "type": "string"
+            },
+            "status": {
+              "title": "Status",
+              "type": "string"
+            },
+            "tool_name": {
+              "title": "Tool Name",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "session_id",
+            "input_id",
+            "tool_name",
+            "arguments",
+            "status",
+            "expires_at"
+          ],
+          "title": "ApprovalView",
+          "type": "object"
+        },
+        "ExtensionView": {
+          "additionalProperties": false,
+          "properties": {
+            "capabilities": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Capabilities",
+              "type": "array"
+            },
+            "enabled": {
+              "title": "Enabled",
+              "type": "boolean"
+            },
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "scope": {
+              "title": "Scope",
+              "type": "string"
+            },
+            "version": {
+              "title": "Version",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "version",
+            "scope",
+            "capabilities",
+            "enabled"
+          ],
+          "title": "ExtensionView",
+          "type": "object"
+        },
+        "InputView": {
+          "additionalProperties": false,
+          "properties": {
+            "created_at": {
+              "title": "Created At",
+              "type": "integer"
+            },
+            "error": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Error"
+            },
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "kind": {
+              "title": "Kind",
+              "type": "string"
+            },
+            "logical_id": {
+              "title": "Logical Id",
+              "type": "string"
+            },
+            "max_requests": {
+              "title": "Max Requests",
+              "type": "integer"
+            },
+            "request_id": {
+              "title": "Request Id",
+              "type": "string"
+            },
+            "requests_used": {
+              "title": "Requests Used",
+              "type": "integer"
+            },
+            "run_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Run Id"
+            },
+            "status": {
+              "title": "Status",
+              "type": "string"
+            },
+            "tokens_used": {
+              "title": "Tokens Used",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "id",
+            "request_id",
+            "run_id",
+            "logical_id",
+            "status",
+            "kind",
+            "created_at",
+            "requests_used",
+            "tokens_used",
+            "max_requests"
+          ],
+          "title": "InputView",
+          "type": "object"
+        },
+        "MessageView": {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "is_error": {
+              "default": false,
+              "title": "Is Error",
+              "type": "boolean"
+            },
+            "role": {
+              "enum": [
+                "user",
+                "assistant",
+                "toolResult"
+              ],
+              "title": "Role",
+              "type": "string"
+            },
+            "status": {
+              "default": "complete",
+              "title": "Status",
+              "type": "string"
+            },
+            "text": {
+              "title": "Text",
+              "type": "string"
+            },
+            "timestamp": {
+              "title": "Timestamp",
+              "type": "integer"
+            },
+            "tool_calls": {
+              "items": {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              "title": "Tool Calls",
+              "type": "array"
+            },
+            "tool_name": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Tool Name"
+            }
+          },
+          "required": [
+            "id",
+            "role",
+            "text",
+            "timestamp"
+          ],
+          "title": "MessageView",
+          "type": "object"
+        },
+        "SessionSettings": {
+          "additionalProperties": false,
+          "properties": {
+            "allowed_tools": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Allowed Tools",
+              "type": "array"
+            },
+            "approval_tools": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Approval Tools",
+              "type": "array"
+            },
+            "enabled_extensions": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Enabled Extensions",
+              "type": "array"
+            },
+            "max_requests_per_input": {
+              "default": 8,
+              "maximum": 512,
+              "minimum": 1,
+              "title": "Max Requests Per Input",
+              "type": "integer"
+            },
+            "max_tokens_per_input": {
+              "default": 64000,
+              "maximum": 10000000,
+              "minimum": 1,
+              "title": "Max Tokens Per Input",
+              "type": "integer"
+            },
+            "max_turns_per_run": {
+              "default": 4,
+              "maximum": 128,
+              "minimum": 1,
+              "title": "Max Turns Per Run",
+              "type": "integer"
+            },
+            "model_id": {
+              "default": "demo",
+              "maxLength": 100,
+              "minLength": 1,
+              "title": "Model Id",
+              "type": "string"
+            },
+            "run_timeout_seconds": {
+              "default": 120,
+              "maximum": 3600,
+              "minimum": 1,
+              "title": "Run Timeout Seconds",
+              "type": "integer"
+            },
+            "thinking_level": {
+              "default": "off",
+              "maxLength": 32,
+              "minLength": 1,
+              "title": "Thinking Level",
+              "type": "string"
+            }
+          },
+          "title": "SessionSettings",
+          "type": "object"
+        },
+        "SessionSummary": {
+          "additionalProperties": false,
+          "properties": {
+            "created_at": {
+              "title": "Created At",
+              "type": "integer"
+            },
+            "domain": {
+              "enum": [
+                "agent",
+                "qq"
+              ],
+              "title": "Domain",
+              "type": "string"
+            },
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "model_id": {
+              "title": "Model Id",
+              "type": "string"
+            },
+            "owner_id": {
+              "title": "Owner Id",
+              "type": "string"
+            },
+            "pending_count": {
+              "title": "Pending Count",
+              "type": "integer"
+            },
+            "status": {
+              "title": "Status",
+              "type": "string"
+            },
+            "title": {
+              "title": "Title",
+              "type": "string"
+            },
+            "updated_at": {
+              "title": "Updated At",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "id",
+            "title",
+            "domain",
+            "owner_id",
+            "created_at",
+            "updated_at",
+            "status",
+            "pending_count",
+            "model_id"
+          ],
+          "title": "SessionSummary",
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "approvals": {
+          "items": {
+            "$ref": "#/$defs/ApprovalView"
+          },
+          "title": "Approvals",
+          "type": "array"
+        },
+        "capabilities": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Capabilities",
+          "type": "array"
+        },
+        "config_revision": {
+          "title": "Config Revision",
+          "type": "integer"
+        },
+        "epoch": {
+          "title": "Epoch",
+          "type": "string"
+        },
+        "extensions": {
+          "items": {
+            "$ref": "#/$defs/ExtensionView"
+          },
+          "title": "Extensions",
+          "type": "array"
+        },
+        "inputs": {
+          "items": {
+            "$ref": "#/$defs/InputView"
+          },
+          "title": "Inputs",
+          "type": "array"
+        },
+        "messages": {
+          "items": {
+            "$ref": "#/$defs/MessageView"
+          },
+          "title": "Messages",
+          "type": "array"
+        },
+        "protocol_version": {
+          "const": 1,
+          "default": 1,
+          "title": "Protocol Version",
+          "type": "integer"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "session": {
+          "$ref": "#/$defs/SessionSummary"
+        },
+        "session_id": {
+          "title": "Session Id",
+          "type": "string"
+        },
+        "settings": {
+          "$ref": "#/$defs/SessionSettings"
+        }
+      },
+      "required": [
+        "epoch",
+        "session_id",
+        "seq",
+        "session",
+        "messages",
+        "inputs",
+        "approvals",
+        "settings",
+        "config_revision",
+        "extensions",
+        "capabilities"
+      ],
+      "title": "Snapshot",
+      "type": "object"
+    },
+    "SubmitInput": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "idempotency_key": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "request_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Request Id",
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 32000,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "request_id",
+        "text",
+        "idempotency_key"
+      ],
+      "title": "SubmitInput",
+      "type": "object"
+    },
+    "Subscribe": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "after_seq": {
+          "minimum": 0,
+          "title": "After Seq",
+          "type": "integer"
+        },
+        "epoch": {
+          "title": "Epoch",
+          "type": "string"
+        },
+        "token": {
+          "maxLength": 4096,
+          "minLength": 1,
+          "title": "Token",
+          "type": "string"
+        },
+        "type": {
+          "const": "subscribe",
+          "default": "subscribe",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "token",
+        "epoch",
+        "after_seq"
+      ],
+      "title": "Subscribe",
+      "type": "object"
+    },
+    "UpdateConfig": {
+      "$defs": {
+        "SessionSettings": {
+          "additionalProperties": false,
+          "properties": {
+            "allowed_tools": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Allowed Tools",
+              "type": "array"
+            },
+            "approval_tools": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Approval Tools",
+              "type": "array"
+            },
+            "enabled_extensions": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Enabled Extensions",
+              "type": "array"
+            },
+            "max_requests_per_input": {
+              "default": 8,
+              "maximum": 512,
+              "minimum": 1,
+              "title": "Max Requests Per Input",
+              "type": "integer"
+            },
+            "max_tokens_per_input": {
+              "default": 64000,
+              "maximum": 10000000,
+              "minimum": 1,
+              "title": "Max Tokens Per Input",
+              "type": "integer"
+            },
+            "max_turns_per_run": {
+              "default": 4,
+              "maximum": 128,
+              "minimum": 1,
+              "title": "Max Turns Per Run",
+              "type": "integer"
+            },
+            "model_id": {
+              "default": "demo",
+              "maxLength": 100,
+              "minLength": 1,
+              "title": "Model Id",
+              "type": "string"
+            },
+            "run_timeout_seconds": {
+              "default": 120,
+              "maximum": 3600,
+              "minimum": 1,
+              "title": "Run Timeout Seconds",
+              "type": "integer"
+            },
+            "thinking_level": {
+              "default": "off",
+              "maxLength": 32,
+              "minLength": 1,
+              "title": "Thinking Level",
+              "type": "string"
+            }
+          },
+          "title": "SessionSettings",
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "expected_revision": {
+          "minimum": 0,
+          "title": "Expected Revision",
+          "type": "integer"
+        },
+        "request_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Request Id",
+          "type": "string"
+        },
+        "settings": {
+          "$ref": "#/$defs/SessionSettings"
+        }
+      },
+      "required": [
+        "request_id",
+        "expected_revision",
+        "settings"
+      ],
+      "title": "UpdateConfig",
+      "type": "object"
+    },
+    "UpdateHostConfig": {
+      "$defs": {
+        "HostSettings": {
+          "additionalProperties": false,
+          "properties": {
+            "approval_timeout_seconds": {
+              "default": 60,
+              "maximum": 3600,
+              "minimum": 1,
+              "title": "Approval Timeout Seconds",
+              "type": "integer"
+            },
+            "defaults": {
+              "$ref": "#/$defs/SessionSettings"
+            },
+            "event_window": {
+              "default": 256,
+              "maximum": 8192,
+              "minimum": 8,
+              "title": "Event Window",
+              "type": "integer"
+            },
+            "max_concurrent_requests": {
+              "default": 2,
+              "maximum": 32,
+              "minimum": 1,
+              "title": "Max Concurrent Requests",
+              "type": "integer"
+            },
+            "max_pending_inputs": {
+              "default": 100,
+              "maximum": 10000,
+              "minimum": 1,
+              "title": "Max Pending Inputs",
+              "type": "integer"
+            },
+            "subscriber_buffer": {
+              "default": 128,
+              "maximum": 8192,
+              "minimum": 2,
+              "title": "Subscriber Buffer",
+              "type": "integer"
+            }
+          },
+          "title": "HostSettings",
+          "type": "object"
+        },
+        "SessionSettings": {
+          "additionalProperties": false,
+          "properties": {
+            "allowed_tools": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Allowed Tools",
+              "type": "array"
+            },
+            "approval_tools": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Approval Tools",
+              "type": "array"
+            },
+            "enabled_extensions": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Enabled Extensions",
+              "type": "array"
+            },
+            "max_requests_per_input": {
+              "default": 8,
+              "maximum": 512,
+              "minimum": 1,
+              "title": "Max Requests Per Input",
+              "type": "integer"
+            },
+            "max_tokens_per_input": {
+              "default": 64000,
+              "maximum": 10000000,
+              "minimum": 1,
+              "title": "Max Tokens Per Input",
+              "type": "integer"
+            },
+            "max_turns_per_run": {
+              "default": 4,
+              "maximum": 128,
+              "minimum": 1,
+              "title": "Max Turns Per Run",
+              "type": "integer"
+            },
+            "model_id": {
+              "default": "demo",
+              "maxLength": 100,
+              "minLength": 1,
+              "title": "Model Id",
+              "type": "string"
+            },
+            "run_timeout_seconds": {
+              "default": 120,
+              "maximum": 3600,
+              "minimum": 1,
+              "title": "Run Timeout Seconds",
+              "type": "integer"
+            },
+            "thinking_level": {
+              "default": "off",
+              "maxLength": 32,
+              "minLength": 1,
+              "title": "Thinking Level",
+              "type": "string"
+            }
+          },
+          "title": "SessionSettings",
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "expected_revision": {
+          "minimum": 0,
+          "title": "Expected Revision",
+          "type": "integer"
+        },
+        "request_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Request Id",
+          "type": "string"
+        },
+        "settings": {
+          "$ref": "#/$defs/HostSettings"
+        }
+      },
+      "required": [
+        "request_id",
+        "expected_revision",
+        "settings"
+      ],
+      "title": "UpdateHostConfig",
+      "type": "object"
+    },
+    "WireEvent": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "epoch": {
+          "title": "Epoch",
+          "type": "string"
+        },
+        "payload": {
+          "additionalProperties": true,
+          "title": "Payload",
+          "type": "object"
+        },
+        "protocol_version": {
+          "const": 1,
+          "default": 1,
+          "title": "Protocol Version",
+          "type": "integer"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        },
+        "session_id": {
+          "title": "Session Id",
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "session_changed",
+            "input_received",
+            "run_started",
+            "run_finished",
+            "message_start",
+            "text_delta",
+            "message_end",
+            "approval_requested",
+            "approval_resolved",
+            "config_changed",
+            "resync_required",
+            "heartbeat"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "epoch",
+        "session_id",
+        "seq",
+        "type",
+        "payload"
+      ],
+      "title": "WireEvent",
+      "type": "object"
+    }
+  }
+}

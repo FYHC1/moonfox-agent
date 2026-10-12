@@ -2,6 +2,7 @@
 
 import argparse
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -17,6 +18,9 @@ def main() -> int:
     )
     parser.add_argument(
         "--work-dir", type=Path, help="parent directory for temporary check artifacts"
+    )
+    parser.add_argument(
+        "--web", action="store_true", help="also test and build the independent WebUI"
     )
     args = parser.parse_args()
     if args.work_dir is not None:
@@ -47,6 +51,25 @@ def main() -> int:
             )
             if result.returncode:
                 return result.returncode
+        result = subprocess.run(
+            [sys.executable, "scripts/export_protocol.py", "--check"],
+            cwd=ROOT,
+            env=env,
+            check=False,
+        )
+        if result.returncode:
+            return result.returncode
+        if args.web:
+            npm = shutil.which("npm.cmd" if os.name == "nt" else "npm")
+            if npm is None:
+                print("Node/npm is required for --web; backend-only checks do not need it")
+                return 1
+            for task in ("test", "build"):
+                result = subprocess.run(
+                    [npm, "run", task], cwd=ROOT / "packages/web-ui", env=env, check=False
+                )
+                if result.returncode:
+                    return result.returncode
     return 0
 
 

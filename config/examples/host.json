@@ -1,0 +1,18 @@
+{
+  "defaults": {
+    "model_id": "demo",
+    "thinking_level": "off",
+    "max_turns_per_run": 4,
+    "max_requests_per_input": 8,
+    "max_tokens_per_input": 64000,
+    "run_timeout_seconds": 120,
+    "allowed_tools": [],
+    "approval_tools": [],
+    "enabled_extensions": []
+  },
+  "max_concurrent_requests": 2,
+  "approval_timeout_seconds": 60,
+  "event_window": 256,
+  "subscriber_buffer": 128,
+  "max_pending_inputs": 100
+}

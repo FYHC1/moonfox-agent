@@ -43,6 +43,7 @@ class SessionView:
     messages: tuple[AgentMessage, ...]
     model: Model
     thinking_level: str
+    message_ids: tuple[str | None, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

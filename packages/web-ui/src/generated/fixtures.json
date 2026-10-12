@@ -1,0 +1,206 @@
+{
+  "events": [
+    {
+      "epoch": "epoch-demo",
+      "payload": {
+        "input": {
+          "created_at": 1700000000001,
+          "error": null,
+          "id": "input-demo",
+          "kind": "input",
+          "logical_id": "input-demo",
+          "max_requests": 8,
+          "request_id": "request-demo",
+          "requests_used": 0,
+          "run_id": null,
+          "status": "queued",
+          "tokens_used": 0
+        }
+      },
+      "protocol_version": 1,
+      "seq": 1,
+      "session_id": "session-demo",
+      "type": "input_received"
+    },
+    {
+      "epoch": "epoch-demo",
+      "payload": {
+        "message": {
+          "id": "message-user",
+          "is_error": false,
+          "role": "user",
+          "status": "complete",
+          "text": "你好",
+          "timestamp": 1700000000001,
+          "tool_calls": [],
+          "tool_name": null
+        }
+      },
+      "protocol_version": 1,
+      "seq": 2,
+      "session_id": "session-demo",
+      "type": "message_end"
+    },
+    {
+      "epoch": "epoch-demo",
+      "payload": {
+        "input": {
+          "created_at": 1700000000001,
+          "error": null,
+          "id": "input-demo",
+          "kind": "input",
+          "logical_id": "input-demo",
+          "max_requests": 8,
+          "request_id": "request-demo",
+          "requests_used": 0,
+          "run_id": "run-demo",
+          "status": "running",
+          "tokens_used": 0
+        },
+        "status": "running"
+      },
+      "protocol_version": 1,
+      "seq": 3,
+      "session_id": "session-demo",
+      "type": "run_started"
+    },
+    {
+      "epoch": "epoch-demo",
+      "payload": {
+        "message": {
+          "id": "message-assistant",
+          "is_error": false,
+          "role": "assistant",
+          "status": "streaming",
+          "text": "",
+          "timestamp": 1700000000002,
+          "tool_calls": [],
+          "tool_name": null
+        }
+      },
+      "protocol_version": 1,
+      "seq": 4,
+      "session_id": "session-demo",
+      "type": "message_start"
+    },
+    {
+      "epoch": "epoch-demo",
+      "payload": {
+        "delta": "你好，",
+        "message_id": "message-assistant"
+      },
+      "protocol_version": 1,
+      "seq": 5,
+      "session_id": "session-demo",
+      "type": "text_delta"
+    },
+    {
+      "epoch": "epoch-demo",
+      "payload": {
+        "delta": "世界！",
+        "message_id": "message-assistant"
+      },
+      "protocol_version": 1,
+      "seq": 6,
+      "session_id": "session-demo",
+      "type": "text_delta"
+    },
+    {
+      "epoch": "epoch-demo",
+      "payload": {
+        "message": {
+          "id": "message-assistant",
+          "is_error": false,
+          "role": "assistant",
+          "status": "complete",
+          "text": "你好，世界！",
+          "timestamp": 1700000000002,
+          "tool_calls": [],
+          "tool_name": null
+        }
+      },
+      "protocol_version": 1,
+      "seq": 7,
+      "session_id": "session-demo",
+      "type": "message_end"
+    },
+    {
+      "epoch": "epoch-demo",
+      "payload": {
+        "input": {
+          "created_at": 1700000000001,
+          "error": null,
+          "id": "input-demo",
+          "kind": "input",
+          "logical_id": "input-demo",
+          "max_requests": 8,
+          "request_id": "request-demo",
+          "requests_used": 1,
+          "run_id": "run-demo",
+          "status": "completed",
+          "tokens_used": 12
+        },
+        "status": "completed"
+      },
+      "protocol_version": 1,
+      "seq": 8,
+      "session_id": "session-demo",
+      "type": "run_finished"
+    },
+    {
+      "epoch": "epoch-demo",
+      "payload": {},
+      "protocol_version": 1,
+      "seq": 8,
+      "session_id": "session-demo",
+      "type": "heartbeat"
+    },
+    {
+      "epoch": "epoch-demo",
+      "payload": {
+        "reason": "snapshot_required"
+      },
+      "protocol_version": 1,
+      "seq": 8,
+      "session_id": "session-demo",
+      "type": "resync_required"
+    }
+  ],
+  "snapshot": {
+    "approvals": [],
+    "capabilities": [
+      "cancel",
+      "continue"
+    ],
+    "config_revision": 0,
+    "epoch": "epoch-demo",
+    "extensions": [],
+    "inputs": [],
+    "messages": [],
+    "protocol_version": 1,
+    "seq": 0,
+    "session": {
+      "created_at": 1700000000000,
+      "domain": "agent",
+      "id": "session-demo",
+      "model_id": "demo",
+      "owner_id": "demo-user",
+      "pending_count": 0,
+      "status": "idle",
+      "title": "中文演示对话",
+      "updated_at": 1700000000000
+    },
+    "session_id": "session-demo",
+    "settings": {
+      "allowed_tools": [],
+      "approval_tools": [],
+      "enabled_extensions": [],
+      "max_requests_per_input": 8,
+      "max_tokens_per_input": 64000,
+      "max_turns_per_run": 4,
+      "model_id": "demo",
+      "run_timeout_seconds": 120,
+      "thinking_level": "off"
+    }
+  }
+}

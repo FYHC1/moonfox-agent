@@ -1,6 +1,6 @@
 # Moonfox 整体架构：独立核心 + 业务应用 + 显示层
 
-> 当前已确认的架构基线：**两个独立核心包 + 一个业务应用包 + 一个显示包，具体能力通过扩展实现。** 阶段 A/B/C 已实现；实际进展与验证以 [HANDOFF.md](HANDOFF.md) 为准。
+> 当前已确认的架构基线：**两个独立核心包 + 一个业务应用包 + 一个显示包，具体能力通过扩展实现。** 阶段 A–D 已实现；实际进展与验证以 [HANDOFF.md](HANDOFF.md) 为准。
 > 继承 [mini-pi 设计](../mini-pi/DESIGN.md) 的分层与契约，但不把其中的示例代码视为已经验证的实现。
 > 接口细节见 [DESIGN.md](DESIGN.md)。[历史草案](history/DESIGN-v1.md) 仅记录早期讨论，不再作为实施依据。
 
@@ -108,7 +108,7 @@ Python 三个主包分别拥有 pyproject、wheel 和测试；其中**核心仅�
 
 ## 4. 规划目录
 
-以下为目标目录；阶段 A/B 已创建独立 ai/agent，阶段 C 已创建 moonfox-app 的 runtime/extension_api/extensions/bootstrap、headless/最小扩展示例及验收。services/config/security/jobs/server/web-ui 与具体业务扩展后续创建；不预先安装尚不存在的 server extra。
+以下为目标目录；A/B 已创建独立 ai/agent，C 已创建 runtime/extension_api/extensions，D 已增加 services/config/security、可选 server、CLI 和独立 web-ui。具体业务扩展/jobs 的完整持久作业系统按后续阶段推进。阶段 D 的实际范围及限制见 [STAGE-D.md](STAGE-D.md)。
 
 ~~~text
 moonfox-agent/

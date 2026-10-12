@@ -1,6 +1,7 @@
 """Supported headless entry points; import does not discover or start extensions."""
 
-from .bootstrap import HeadlessApp, create_headless_app
+from .bootstrap import HeadlessApp, create_application, create_headless_app
+from .config import HostSettings, SessionSettings
 from .extension_api import (
     ExtensionManifest,
     PermissionDecision,
@@ -53,8 +54,18 @@ from .runtime.storage import (
     StoreError,
     StoreSnapshot,
 )
+from .security import Principal, TokenAuth
+from .services.hub import SessionHub
+from .services.types import ModelRegistration
 
 __all__ = [
+    "HostSettings",
+    "SessionSettings",
+    "Principal",
+    "TokenAuth",
+    "SessionHub",
+    "ModelRegistration",
+    "create_application",
     "AgentSession",
     "CompactionDraft",
     "CompactionEntry",

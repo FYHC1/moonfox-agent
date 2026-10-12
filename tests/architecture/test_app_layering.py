@@ -30,6 +30,10 @@ def violations(source, module, is_package=False):
         },
         "runtime": {"bootstrap", "extensions", "services", "config", "security", "jobs", "server"},
         "extensions": {"bootstrap", "runtime", "services", "config", "security", "jobs", "server"},
+        "services": {"bootstrap", "server"},
+        "config": {"bootstrap", "runtime", "extensions", "services", "security", "jobs", "server"},
+        "security": {"bootstrap", "runtime", "extensions", "services", "config", "jobs", "server"},
+        "server": {"bootstrap", "runtime", "extensions"},
     }.get(layer, set())
     errors = []
     for node in ast.walk(ast.parse(source)):
@@ -59,12 +63,25 @@ def violations(source, module, is_package=False):
                     errors.append(target)
             elif root == "importlib":
                 errors.append("dynamic loader")
+            elif root in {"fastapi", "starlette", "uvicorn", "websockets"} and layer in {
+                "server",
+                "cli",
+            }:
+                continue
             elif root not in sys.stdlib_module_names and root not in ALLOWED_EXTERNAL:
                 errors.append(target)
     return errors
 
 
-forbidden_by_api = {"extension_api", "runtime", "extensions"}
+forbidden_by_api = {
+    "extension_api",
+    "runtime",
+    "extensions",
+    "services",
+    "security",
+    "config",
+    "server",
+}
 
 
 def test_app_imports_follow_internal_boundaries():
@@ -91,6 +108,10 @@ def test_app_imports_follow_internal_boundaries():
         ("import importlib", "moonfox_app.extension_api.types"),
         ("__import__(name)", "moonfox_app.runtime.session.manager"),
         ("import fastapi", "moonfox_app.runtime.session.manager"),
+        ("from moonfox_app.bootstrap import create_headless_app", "moonfox_app.services.hub"),
+        ("from moonfox_app.server import schema", "moonfox_app.services.hub"),
+        ("from moonfox_app.runtime.session import manager", "moonfox_app.server.app"),
+        ("import fastapi", "moonfox_app.security.identity"),
     ],
 )
 def test_app_forbidden_import_negative_cases(source, module):
@@ -117,7 +138,12 @@ def test_headless_distribution_has_no_web_or_business_dependencies():
     assert names == {"moonfox-ai", "moonfox-agent-core", "pydantic", "packaging"}
     assert "moonfox-ai==0.1.0" in dependencies
     assert "moonfox-agent-core==0.1.0" in dependencies
-    assert not project.get("optional-dependencies")
+    assert set(project["optional-dependencies"]) == {"server"}
+    assert {re.split(r"[<>=]", req)[0] for req in project["optional-dependencies"]["server"]} == {
+        "fastapi",
+        "uvicorn",
+        "websockets",
+    }
 
 
 def test_example_plugin_uses_only_sdk():

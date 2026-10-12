@@ -3,16 +3,19 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
+from pathlib import Path
 
 from moonfox_agent.api import AgentTool, RunOptions, RunOutcome
 from moonfox_ai.api import Model, StreamFn, UserMessage
 
+from .config import HostSettings
 from .extension_api import (
     CustomEntryCodec,
     Delivery,
     EventHandler,
     ExtensionDiagnostic,
+    ExtensionManifest,
     PermissionChecker,
     RegistrationHandle,
     SessionBinding,
@@ -21,9 +24,13 @@ from .extension_api import (
 from .extensions import ExtensionRegistry, SessionExtensionManager
 from .runtime.compaction import CompactionPolicy, CompactionResult, CompactionSettings
 from .runtime.prompt import PromptPipelineOptions
+from .runtime.session.entries import EntryDraft, ModelChangeDraft, ThinkingLevelDraft
 from .runtime.session.manager import SessionManager
 from .runtime.session.orchestration import AgentSession
-from .runtime.storage import SessionStore
+from .runtime.storage import JsonlSessionStore, SessionStore
+from .services.hub import SessionHub
+from .services.store import HostStore
+from .services.types import ModelRegistration, SessionRecord, SessionRuntime
 
 
 class HeadlessApp:
@@ -220,4 +227,139 @@ async def create_headless_app(
                 await session.aclose()
             else:
                 store.close()
+        raise
+
+
+def create_application(
+    *,
+    home: Path,
+    models: Mapping[str, ModelRegistration],
+    defaults: HostSettings | None = None,
+    tools: Sequence[AgentTool] = (),
+    registry: ExtensionRegistry | None = None,
+    extension_manifests: Sequence[ExtensionManifest] = (),
+    extension_grants: Mapping[str, frozenset[str]] | None = None,
+    codecs: Mapping[str, CustomEntryCodec] | None = None,
+    system_prompt: str = "You are Moonfox, a helpful personal agent.",
+    compaction_factory: Callable[[StreamFn, Model], CompactionPolicy] | None = None,
+) -> SessionHub:
+    """Construct a durable host; start() is explicit (or owned by the server lifespan).
+
+    Every provider, tool and extension comes from the trusted composition root. No
+    service imports bootstrap or server; runtime factory and projection loader are ports.
+    """
+    store = HostStore(home, defaults=defaults)
+    catalog = dict(models)
+    extension_registry = registry or ExtensionRegistry()
+    granted = dict(extension_grants or {})
+
+    def validate_extensions(enabled: tuple[str, ...]) -> None:
+        extension_registry.resolve(enabled, scope="session", grants=granted)
+
+    def transcript(record: SessionRecord) -> SessionManager:
+        folder = store.home / "sessions" / record.domain
+        folder.mkdir(parents=True, exist_ok=True)
+        path = folder / f"{record.id}.jsonl"
+        if not path.exists() and store.inputs(record.id):
+            raise ValueError("Session transcript is missing; refusing to discard existing history")
+        data = JsonlSessionStore(path, create=not path.exists())
+        try:
+            binding = SessionBinding(record.id, record.scope_id)
+            if data.snapshot().entries:
+                return SessionManager(data, binding=binding, codecs=codecs)
+            if store.inputs(record.id):
+                raise ValueError("Session transcript header missing; refusing empty recovery")
+            return SessionManager.create(
+                data,
+                binding=binding,
+                model=catalog[record.settings.model_id].model,
+                system_prompt=system_prompt,
+                thinking_level=record.settings.thinking_level,
+                codecs=codecs,
+            )
+        except BaseException:
+            data.close()
+            raise
+
+    def load_view(record: SessionRecord) -> SessionView:
+        manager = transcript(record)
+        try:
+            manager.recover_pending_tools()
+            projection = manager.projection()
+            return SessionView(
+                record_binding(record),
+                manager.snapshot().revision,
+                projection.leaf_id,
+                tuple(projection.messages),
+                projection.model,
+                projection.thinking_level,
+                projection.message_entry_ids,
+            )
+        finally:
+            manager.close()
+
+    def record_binding(record: SessionRecord) -> SessionBinding:
+        return SessionBinding(record.id, record.scope_id)
+
+    async def factory(
+        record: SessionRecord, stream: StreamFn, permission: PermissionChecker
+    ) -> SessionRuntime:
+        settings = record.settings
+        model = catalog[settings.model_id].model
+        manager = transcript(record)
+        session: AgentSession | None = None
+        extensions: SessionExtensionManager | None = None
+        try:
+            manager.recover_pending_tools()
+            projection = manager.projection()
+            changes: list[EntryDraft] = []
+            if projection.model != model:
+                changes.append(ModelChangeDraft(model))
+            if projection.thinking_level != settings.thinking_level:
+                changes.append(ThinkingLevelDraft(settings.thinking_level))
+            if changes:
+                manager.commit(changes)
+            session = AgentSession(
+                manager,
+                stream_fn=stream,
+                tools=[tool for tool in tools if tool.name in settings.allowed_tools],
+                permission_checker=permission,
+                compaction_policy=compaction_factory(stream, model) if compaction_factory else None,
+                permission_timeout=store.config()[1].approval_timeout_seconds + 5,
+            )
+            extensions = SessionExtensionManager(
+                extension_registry,
+                actions=session,
+                enabled=settings.enabled_extensions,
+                grants=granted,
+                ensure_idle=session.ensure_idle,
+            )
+            session.bind_extensions(extensions)
+            await extensions.start()
+            await session.refresh_extensions()
+            return HeadlessApp(session, extensions)
+        except BaseException:
+            try:
+                if extensions is not None:
+                    await extensions.stop()
+            finally:
+                if session is not None:
+                    await session.aclose()
+                else:
+                    manager.close()
+            raise
+
+    try:
+        return SessionHub(
+            store,
+            models=catalog,
+            runtime_factory=factory,
+            load_view=load_view,
+            tools=[tool.name for tool in tools],
+            extensions=extension_manifests,
+            validate_extensions=validate_extensions,
+            compact_enabled=compaction_factory is not None,
+        )
+    except BaseException:
+        store.close()
         raise

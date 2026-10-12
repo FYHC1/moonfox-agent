@@ -156,6 +156,7 @@ class AgentSession:
             tuple(deepcopy(projection.messages)),
             projection.model,
             projection.thinking_level,
+            projection.message_entry_ids,
         )
 
     def subscribe(self, listener: EventHandler) -> RegistrationHandle:

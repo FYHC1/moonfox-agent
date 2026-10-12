@@ -2,13 +2,13 @@
 
 > **用途**：当前实施交接文档，保留设计决策并记录已验证的阶段进展。新会话从本页继续，无需回溯历史对话。
 >
-> **当前状态**：**阶段 A/B/C 已实现并通过独立安装验收**。独立核心、Agent 机制、持久会话运行时、扩展 SDK/管理器与 headless 装配已就绪；下一步是阶段 D 的应用服务与 Web 协议。
+> **当前状态**：**阶段 A–D 已实现并通过验收**。独立核心、持久运行时与扩展宿主、SessionHub/配置授权、可选 HTTP/WS 和独立 WebUI 已就绪；下一步为阶段 E 的人设/记忆扩展。
 
 ---
 
 ## 0. 一句话状态
 
-阶段 A/B 的两个独立核心包已上传 GitHub；阶段 C 新增 moonfox-app（runtime/extension_api/extensions/bootstrap），不修改核心源码。安装与检查命令见根 [README](../../README.md)，应用 API 见 [应用包说明](../../packages/moonfox-app/README.md)。
+阶段 C 已先提交并推送为 `012211b`，远程哈希验证一致后才实现 D。阶段 D 增加应用服务与 WebUI，仍不修改 AI/Agent 核心源码。启动/限制见 [阶段 D 说明](STAGE-D.md)，协议见 [STAGE-D-PROTOCOL.md](STAGE-D-PROTOCOL.md)。
 
 ### 当前代码边界
 
@@ -16,17 +16,17 @@
 - `moonfox_agent.api`：steering/follow-up 双队列（one_at_a_time/all）、完整请求/工具/turn 钩子、并行/串行工具、受检嵌套调用、事件、取消和显式运行预算；项目内仅依赖 ai。
 - `continue_`、`reset`、状态替换/模型/工具设置均提供公开入口；运行中修改规范状态被拒绝，取消须等待 idle。
 - 默认工具执行改为 parallel；任一工具 sequential 覆盖使整批串行。阶段 A 四参数 execute 保持兼容，嵌套调用使用新增 execute_with_context 与 ctx.execute_tool。
-- `moonfox_app.api`：headless 工厂/门面、AgentSession、entries/投影/草稿预览、JSONL/in-memory store、可注入压缩；`moonfox_app.extension_api` 提供轻量 SDK。尚无业务服务/server/WebUI/真实 provider/具体人设、记忆或 QQ 扩展。
+- `moonfox_app.api`：headless 单会话与 `create_application`/SessionHub，持久 inbox/outbox、配置/预算/授权；可选 `server` extra 与独立 web-ui。`extension_api` 保持轻量，runtime 仅新增快照 message_ids。真实 provider、人设/记忆/QQ 具体扩展尚未实现。
 
 ### 已验证与复现
 
-- `python scripts/check.py --installation`：Ruff、格式检查、mypy strict、确定性单元/架构测试及安装验收均通过。阶段 C 新增事务恢复、投影/压缩、headless 生命周期、扩展注册/派发/授权/任务收尾负例。
+- `python scripts/check.py --installation --web`：Ruff、格式、strict mypy、Python 单元/架构/独立安装、协议导出一致性和前端测试/构建。浏览器另外执行 `npm.cmd --prefix packages/web-ui run test:browser`。
 - 阶段 B 最终实测：完整验收 **209 passed**；Agent 专项 **126 passed**；mypy strict 检查 **19** 个源码文件；coverage 启用分支统计的总覆盖率 **97%**（非 100% 分支覆盖）。
-- 阶段 C 验证新增应用 wheel，保持原核心两个 wheel 不安装应用；最终测试/覆盖率记录见下方「阶段 C」小节。mypy strict 当前检查 **48** 个源码文件。
-- 安装验收分别构建三个包 sdist → wheel，在四个干净环境验证 AI 单包、Agent wheel、应用 wheel、依次本地目录安装；headless 不安装 Web 框架或具体业务扩展。
-- 四个示例复制到仓库外，使用 `python -I`：core_only/core_stage_b 验证独立核心；headless_app 验证保存恢复；minimal_extension 验证首轮注入与卸载清理。
+- 阶段 C 基线完整验收 448 passed，详见下方历史记录；阶段 D 当前 strict mypy 检查 **74** 个源码文件。
+- 安装验收三个包 sdist → wheel，五个干净环境：AI 单包、Agent、headless app、依次目录安装、server extra。核心/headless 不安装 Web 框架或前端产物。
+- 六个示例复制到仓库外用 `python -I`：core_only/core_stage_b、headless_app/minimal_extension、application_service/server_smoke。后两者验证 durable 接收/完成分离和 API-only 安装。
 - 实测 Windows / Python 3.14.8；声明最低 Python 3.12，但本机没有对 3.12 单独执行测试。开发工具安装在本会话 scratch 虚拟环境，不改全局 Python。
-- Git 分支 `main`，公开仓库 `https://github.com/FYHC1/moonfox-agent`；阶段 A `a92898f`、阶段 B `cb9ce06` 已推送。阶段 C 交付由本阶段提交记录；最新提交/推送状态以 Git 为准。身份仅配置本仓库，使用 GitHub noreply 邮箱。
+- Git 分支 `main`，公开仓库 `https://github.com/FYHC1/moonfox-agent`；阶段 A `a92898f`、B `cb9ce06`、C `012211b` 已推送；D 交付由本阶段提交记录，最新哈希/推送状态以 Git 为准。使用仓库局部 noreply 身份与 GitHub CLI 凭据，不把 token 写入项目。
 - **阶段交付规则（用户确认）**：每完成一个阶段，先完成相关验收，提交并推送 GitHub、核对本地/远程哈希一致，再开始下一阶段。阶段 C 推送必须先于阶段 D 实现。
 
 实现修正参考伪代码：取消信号以 AI 层协议表示，避免反向依赖；流不是广播，溢出明确失败且最终结果可等待；未终止流确定性报错；快照采用深拷贝；未知自定义消息要求显式 codec，编程错误不冒充模型失败。
@@ -54,9 +54,22 @@
 - `create_headless_app` 显式拥有 store 与扩展生命周期；无扩展也能保存恢复。关闭/外部 task 取消等待工具与通知收尾；未消费 steering/follow-up 仍是进程内队列，不冒充 durable inbox。
 - 最终实测：完整 `check.py --installation` **448 passed**；应用专项 **221 passed**；mypy strict **48** 个源码文件；Ruff 格式检查 **76** 个文件。coverage 开启 branch 后，应用总覆盖率 **93%**（不是 93% 分支覆盖）。核心源码和参考 Markdown 本轮未改动。
 
-### 下一步：阶段 D
+### 阶段 D 的实现与验收
 
-先读本页、ARCHITECTURE/DESIGN 与应用包 README。实现 services 的 SessionHub/单会话执行者/SessionFactory/路由/inbox-outbox、config/security/预算与统一计量端口，再建立 server 的版本化 HTTP/WS 协议和独立 web-ui。不要把业务规则放进 runtime/core 或用 UI 状态承担持久会话生命周期。人设/记忆/QQ 实现按 E/F 后续进行。
+- services/SessionHub：每会话单执行者、durable FIFO 输入、幂等回执、跨会话并行；runtime/扩展实例跨输入保留，配置修订仅下次 run 安全边界生效。关闭浏览器不取消 Agent。
+- SQLite 保存会话/domain/route/scope、配置、输入、预算、审批、outbox；JSONL 独立保留 transcript。未领取输入可恢复，运行中断标 unknown，不自动重放；历史丢失/损坏隔离，单宿主 lease 防双写。
+- config/security：不可变 strict 设置、CAS 修订、显式 env secret references、owner/admin 授权；前端不能指定 domain/owner/scope。工具授权与单次审批 fail-closed，嵌套调用同链。
+- ModelGateway：共享并发、逻辑输入请求/时间/token 预留，continue 不清零。预留为估算且不退崩溃额度，usage 超额追加记账；不声称精确金额硬上限，无自动 Retry-After/业务重试。
+- BoundChannelGateway：固定连接/账号/目标授权，按 bot+target+message_id 去重；最终公开回复先进入 outbox，发送不明标 unknown、不盲目重发。仅假 transport 验收，不实现 OneBot/SnowLuma。
+- server：可选依赖，HTTP Bearer + WS 首帧鉴权/Origin allowlist，命令/快照/订阅均授权；稳定 message ID、epoch/seq、独立有界缓冲/原子水位补发/resync，wire 不含 partial/reasoning/内部审计。API-only 无前端也运行。
+- web-ui：独立 Vite/原生 JS/AJV，消费服务端导出 schema/夹具；中文认证、会话、流式消息、工具/审批、配置冲突、重连/手机布局。token 只在页面内存，无浏览器业务队列。
+- 最终验收：Python **576 passed**（含五环境安装）；应用专项 **337 passed**；strict mypy **74** 源文件、Ruff 格式 **112** 文件；前端 **41** 单元测试、生产构建与 **7/7** Playwright 浏览器夹具测试通过。应用 coverage 启用 branch 的总覆盖率 **89%**，不是分支覆盖率。
+- 真实本机服务 + Edge 154 浏览器联调通过：登录/新建/发送流式完成、保存配置、刷新恢复、关闭页面后 run 继续、390px 无横向溢出、页面 JS 错误 0、local/sessionStorage 均空。与夹具测试分开验证；测试令牌/数据/截图全部在 scratch。内置浏览器面板不可用，改用 Playwright/本机 Edge。
+- 环境：Python 3.14.8、Node **24.21.0**；最低 Python 3.12 未单独测试。Starlette TestClient 使用 httpx 有一条上游弃用警告，不影响测试；未以忽略失败方式消除。AI/Agent 与参考 Markdown 本轮不变。
+
+### 下一步：阶段 E
+
+先读本页、ARCHITECTURE/DESIGN、应用包 README 和 STAGE-D。实现可启停的人设/记忆会话扩展，默认 honesty_mode=roleplay；结构性隔离必须覆盖数据库、检索、缓存、作业与删除。SDK 不可越权读取全局 storage。真实 provider 网络适配仍需独立实现/测试，不把 demo 当真实模型；QQ/SnowLuma 留在 F。每阶段验收后先提交推送再进入下一阶段。
 
 文档维护：Ruff 只处理 Python 文件，排除 docs；原 mini-pi 和历史草案保持本轮前的内容。
 

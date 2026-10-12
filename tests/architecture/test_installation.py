@@ -173,11 +173,19 @@ def test_wheels_and_source_installs_work_outside_workspace(tmp_path):
                     "pydantic",
                 ]
             else:
-                assert sorted(req.split("<")[0].split("=")[0] for req in requirements) == [
+                assert sorted(
+                    req.split("<")[0].split("=")[0] for req in requirements if "extra ==" not in req
+                ) == [
                     "moonfox-agent-core",
                     "moonfox-ai",
                     "packaging",
                     "pydantic",
+                ]
+                assert set(metadata.get_all("Provides-Extra", [])) == {"server"}
+                assert sorted(req.split("<")[0] for req in requirements if "extra ==" in req) == [
+                    "fastapi",
+                    "uvicorn",
+                    "websockets",
                 ]
 
     # Materialize the runtime and isolated-build dependencies once; installs below are offline.
@@ -192,8 +200,9 @@ def test_wheels_and_source_installs_work_outside_workspace(tmp_path):
             artifacts,
             "--find-links",
             artifacts,
-            wheels["moonfox-app"],
+            "moonfox-app[server]==0.1.0",
             "hatchling>=1.26,<2",
+            "httpx>=0.28,<1",
         ],
         cwd=outside,
         env=env,
@@ -256,6 +265,8 @@ def test_wheels_and_source_installs_work_outside_workspace(tmp_path):
     headless = outside / "headless_app.py"
     shutil.copy2(ROOT / "examples" / "headless_app.py", headless)
     minimal = outside / "minimal_extension"
+    durable = outside / "application_service.py"
+    shutil.copy2(ROOT / "examples" / "application_service.py", durable)
     shutil.copytree(ROOT / "examples" / "minimal_extension", minimal)
     for interpreter in (app_python, source_python):
         if interpreter == source_python:
@@ -272,4 +283,18 @@ def test_wheels_and_source_installs_work_outside_workspace(tmp_path):
         output = run([interpreter, "-I", minimal / "run.py"], cwd=outside, env=env)
         assert "extension=greeting; outcome=completed" in output
         assert "unloaded=True; prompt_cleared=True" in output
+        output = run([interpreter, "-I", durable], cwd=outside, env=env)
+        assert "accepted=pending; settled=completed; messages=2" in output
         run([interpreter, "-I", "-m", "pip", "check"], cwd=outside, env=env)
+
+    server_python = make_environment(tmp_path / "server-extra")
+    run(
+        [server_python, "-I", "-m", "pip", "install", "moonfox-app[server]==0.1.0", "httpx"],
+        cwd=outside,
+        env=env,
+    )
+    smoke = outside / "server_smoke.py"
+    shutil.copy2(ROOT / "examples" / "server_smoke.py", smoke)
+    output = run([server_python, "-I", smoke], cwd=outside, env=env)
+    assert "http=200; protocol=1; api_only=True" in output
+    run([server_python, "-I", "-m", "pip", "check"], cwd=outside, env=env)

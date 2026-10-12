@@ -1,7 +1,7 @@
 # Moonfox 接口设计：核心与扩展契约
 
 > 当前有效设计，替代 [历史草案](history/DESIGN-v1.md)。整体边界与目录以 [ARCHITECTURE.md](ARCHITECTURE.md) 为准。
-> 下列签名覆盖完整实施路线；阶段 A/B/C 已实现的核心、headless 运行时和扩展子集以公开 API 与测试为准，尚未实现的业务服务/协议仍是拟定契约。参考 [mini-pi 设计](../mini-pi/DESIGN.md) 的分层、事件、队列与边界语义。
+> 下列签名覆盖完整实施路线；阶段 A–D 的核心、运行时/扩展、应用服务/配置授权与 HTTP/WS 子集以公开 API 和测试为准。具体业务扩展仍是后续拟定契约。阶段 D 实际能力与限制见 [STAGE-D.md](STAGE-D.md)。
 
 ## 1. 包归属、公开 API 与可移植性
 
@@ -278,6 +278,8 @@ packages/web-ui 独立构建为静态产物，可随应用发行物托管；业�
 
 ## 8. 状态说明
 
-阶段 A/B/C 已完成：ai/agent 独立包及通用机制；moonfox-app 的追加式 entries、分支投影、JSONL 事务/恢复、prompt/context、可注入压缩、轻量 SDK、会话/宿主扩展管理器和 headless 装配。首轮增强、强制工具授权、原子草稿、卸载清理、取消收尾和独立安装均有验收。应用服务、认证/域路由、durable inbox/outbox、Web 协议、记忆数据库和具体业务扩展仍未实现。
+阶段 A–D 已实现：独立 ai/agent；moonfox-app 的持久会话/投影/压缩和扩展管理；SessionHub、SQLite inbox/outbox/预算、配置 CAS、身份/审批、可选 HTTP/WS，以及独立中文 WebUI。CLI 仅提供离线 demo；真实 provider 网络适配、人设/记忆/QQ 具体实现仍未完成。
 
 阶段 C 的实际接缝：`SessionBinding(session_id, scope_id)` 由 headless 调用者注入，runtime 仅校验 opaque 绑定，完整业务授权后置；context provider 只提交带 source 的参考块，required custom context 使用显式 codec；boundary 当前允许 namespaced custom 草稿，同次预算内继续，不提供自动重试/重入。工具未配置宿主权限检查器则拒绝，使用校验后的实际参数；所有嵌套调用同链检查。摘要策略显式注入，默认不产生额外模型请求，阈值触发也有次数/超时界限。详细行为见 [应用包说明](../../packages/moonfox-app/README.md) 和 [HANDOFF.md](HANDOFF.md)，不以旧伪代码作为兼容性证明。
+
+阶段 D 使用域/路由/作用域结构字段和 owner/admin 授权，持久输入与完成事件分离；显式继续复用 logical input 预算，不自动重放 unknown。HTTP/WS schema 单源导出给前端，稳定 message ID、epoch/seq、独立有界订阅和 resync 均有验收。完整实现说明见 [STAGE-D.md](STAGE-D.md)，详细传输契约见 [STAGE-D-PROTOCOL.md](STAGE-D-PROTOCOL.md)。

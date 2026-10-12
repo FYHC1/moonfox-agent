@@ -13,3 +13,9 @@ dist/
 .env.*
 !.env.example
 !.env.*.example
+node_modules/
+playwright-report/
+test-results/
+.moonfox/
+*.sqlite-wal
+*.sqlite-shm
